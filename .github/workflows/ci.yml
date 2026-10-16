@@ -1,0 +1,124 @@
+# SPDX-FileCopyrightText: 2026 GraphCal contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, 'claude/**']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static:
+    name: Lint, unit tests, Psalm (PHP ${{ matrix.php }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.2', '8.5']
+    steps:
+      - uses: actions/checkout@v5
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: intl, mbstring, xml
+          coverage: none
+      - run: composer install --no-interaction --no-progress
+      - name: PHP syntax
+        run: composer run lint
+      - name: Unit tests
+        run: composer run test:unit
+      - name: Psalm
+        if: matrix.php == '8.2'
+        run: composer run psalm
+
+  info-xml:
+    name: Validate appinfo/info.xml
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq libxml2-utils
+      - run: curl -sSfL -o info.xsd https://raw.githubusercontent.com/nextcloud/appstore/master/nextcloudappstore/api/v1/release/info.xsd
+      - run: xmllint appinfo/info.xml --schema info.xsd --noout
+
+  reuse:
+    name: REUSE licensing
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: fsfe/reuse-action@v6
+
+  integration:
+    name: Nextcloud ${{ matrix.server }} (PHP ${{ matrix.php }}, ${{ matrix.db }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { server: stable33, php: '8.2', db: sqlite }
+          - { server: stable34, php: '8.4', db: sqlite }
+          - { server: stable35, php: '8.5', db: pgsql }
+    services:
+      postgres:
+        image: ${{ matrix.db == 'pgsql' && 'postgres:16' || '' }}
+        env:
+          POSTGRES_USER: nextcloud
+          POSTGRES_PASSWORD: nextcloud
+          POSTGRES_DB: nextcloud
+        ports: ['5432:5432']
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - name: Checkout Nextcloud server
+        uses: actions/checkout@v5
+        with:
+          repository: nextcloud/server
+          ref: ${{ matrix.server }}
+          submodules: true
+          path: server
+      - name: Checkout app
+        uses: actions/checkout@v5
+        with:
+          path: server/apps/graphcal
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: ctype, curl, dom, fileinfo, gd, intl, mbstring, openssl, pdo_sqlite, pdo_pgsql, posix, sqlite3, xml, zip
+          coverage: none
+      - name: Install Nextcloud
+        working-directory: server
+        run: |
+          if [ "${{ matrix.db }}" = pgsql ]; then
+            DB="--database=pgsql --database-host=127.0.0.1 --database-name=nextcloud --database-user=nextcloud --database-pass=nextcloud"
+          else
+            DB="--database=sqlite"
+          fi
+          php occ maintenance:install $DB --admin-user=admin --admin-pass=admin
+          php occ app:enable graphcal
+          php occ app:list --enabled | grep graphcal
+      - name: Start Nextcloud and the Graph mock
+        run: NC_DIR=$PWD/server server/apps/graphcal/tests/integration/setup.sh
+      - name: End-to-end tests
+        run: NC_DIR=$PWD/server php server/apps/graphcal/tests/integration/run.php
+      - name: Browser tests (settings pages, sign-in popup)
+        working-directory: server/apps/graphcal
+        run: |
+          npm install --no-save --no-audit --no-fund playwright@1.56.1
+          npx playwright install --with-deps chromium
+          SCREENSHOT=$RUNNER_TEMP/settings.png node tests/integration/browser.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: settings-screenshot-${{ matrix.server }}
+          path: ${{ runner.temp }}/settings.png
+          if-no-files-found: ignore
+      - name: Logs on failure
+        if: failure()
+        run: |
+          tail -n 50 server/data/nextcloud.log || true
+          tail -n 50 /tmp/graphcal-nc.log /tmp/graphcal-mock.log || true

@@ -1,0 +1,45 @@
+<?xml version="1.0"?>
+<!--
+  - SPDX-FileCopyrightText: 2026 GraphCal contributors
+  - SPDX-License-Identifier: AGPL-3.0-or-later
+-->
+<psalm errorLevel="4" findUnusedBaselineEntry="true" findUnusedCode="false" phpVersion="8.2"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="https://getpsalm.org/schema/config"
+	xsi:schemaLocation="https://getpsalm.org/schema/config vendor/psalm/phar/config.xsd">
+	<projectFiles>
+		<directory name="lib"/>
+	</projectFiles>
+	<extraFiles>
+		<directory name="vendor"/>
+	</extraFiles>
+	<issueHandlers>
+		<!-- The DAV app (CalDavBackend, Sabre plugin events) is not part of the public OCP stubs. -->
+		<UndefinedClass>
+			<errorLevel type="suppress">
+				<referencedClass name="OCA\DAV\*"/>
+				<referencedClass name="Sabre\DAV\*"/>
+				<referencedClass name="Sabre\CalDAV\*"/>
+			</errorLevel>
+		</UndefinedClass>
+		<UndefinedDocblockClass>
+			<errorLevel type="suppress">
+				<referencedClass name="OCA\DAV\*"/>
+				<referencedClass name="Doctrine\DBAL\*"/>
+			</errorLevel>
+		</UndefinedDocblockClass>
+		<MissingDependency>
+			<errorLevel type="suppress">
+				<file name="lib/Listener/Listener.php"/>
+			</errorLevel>
+		</MissingDependency>
+		<!-- Sabre\VObject exposes typed properties through magic __get (DTSTART is a DateTime property, ...). -->
+		<UndefinedMethod>
+			<errorLevel type="suppress">
+				<referencedMethod name="Sabre\VObject\Property::getDateTime"/>
+				<referencedMethod name="Sabre\VObject\Property::hasTime"/>
+				<referencedMethod name="Sabre\VObject\Property::getDateInterval"/>
+				<referencedMethod name="Sabre\VObject\Node::add"/>
+			</errorLevel>
+		</UndefinedMethod>
+	</issueHandlers>
+</psalm>

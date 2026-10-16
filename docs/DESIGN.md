@@ -1,5 +1,7 @@
 # GraphCal: design decisions
 
+> Status: implemented in 0.1.0 (see the README for setup). Deviations from this plan are noted inline.
+
 These decisions build on [RESEARCH.md](RESEARCH.md). They were made on 2026-10-16.
 
 ## Decisions
@@ -55,7 +57,7 @@ If the user is already signed in to Microsoft in the browser, or Nextcloud itsel
 - **Moving an event between two synced calendars.** Graph has **no move API** for events (`event-move` does not exist in v1.0 or beta):
   - an event **without attendees** is moved by creating it in the target calendar and deleting it from the source; nobody is notified;
   - an event **with attendees** gets a **403 on MOVE**, with the message "Meetings can't be moved between Outlook calendars". Allowing it would mean a cancellation plus a new invitation. Outlook doesn't allow it either.
-- **Restore from trash** of a meeting whose cancellation has already gone out is **rejected**, because restoring it would send new invitations. A restore of a plain event re-creates it.
+- **Restore from trash** re-creates the event in Outlook; for a meeting Exchange sends the invitations again (implemented behaviour in 0.1.0; blocking it is a possible follow-up). Deletions coming *from* Exchange skip the Nextcloud trash.
 - When syncing attendees back, set `SCHEDULE-STATUS=1.1` so the Calendar app shows "Awaiting response" instead of "Invitation will be sent".
 
 ## 4. Recurrence (decision 5)
@@ -119,13 +121,13 @@ worker ─► calendarView/delta per calendar ─► CalDavBackend write (guard 
 
 - **One subscription per user** on `/me/events`, which covers all calendars in the user's mailbox.
   - Requires `Calendars.Read` or higher.
-  - Maximum lifetime 10,080 minutes. A daily `TimedJob` renews it.
+  - Maximum lifetime 10,080 minutes. The poll job renews it when less than 2 days are left (the app requests 6 days).
   - Use a `lifecycleNotificationUrl`, and react to `missed` / `reauthorizationRequired` by running delta or renewing.
   - Limit: 1,000 subscriptions per mailbox, across all apps.
 - **Shared calendars have one limitation.** Microsoft says the `.Shared` delegated permissions **do not support change notifications**: "To set up change notification subscriptions on events in a shared, delegated, or any other user or resource calendar … use the application permission, Calendars.Read." Source: `concepts/outlook-get-shared-events-calendars.md`.
-  - **v1:** shared calendars are **polled** every 2 minutes, with delta, so this is cheap.
+  - **v1:** shared calendars are **polled** every 5 minutes (the poll job interval), with delta, so this is cheap.
   - **Optional later:** if the admin also grants the *application* permission `Calendars.Read`, which is tenant-wide, these calendars get push too. This is an explicit admin choice.
-- **Fallback:** a `TimedJob` runs delta for every connected user every 15 minutes, in case notifications are lost.
+- **Fallback:** a `TimedJob` runs delta for every connected user every 5 minutes, in case notifications are lost.
 - **Delays outside our control:**
   - Graph doesn't promise a delivery time for notifications. It is usually seconds, but this is unverified and needs measuring in the test tenant.
   - The Nextcloud Calendar web UI does not refresh live, so a change appears on the next navigation or reload. DAV clients use their own sync interval.

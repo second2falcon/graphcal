@@ -1,0 +1,31 @@
+{
+	"name": "second2falcon/graphcal",
+	"description": "Two-way sync between Nextcloud Calendar and Microsoft 365 / Exchange Online",
+	"license": "AGPL-3.0-or-later",
+	"type": "project",
+	"autoload": {
+		"psr-4": {
+			"OCA\\GraphCal\\": "lib/"
+		}
+	},
+	"require": {
+		"php": "^8.2"
+	},
+	"require-dev": {
+		"nextcloud/ocp": "dev-stable33",
+		"phpunit/phpunit": "^11.5",
+		"psalm/phar": "^5.26",
+		"sabre/vobject": "4.5.*"
+	},
+	"scripts": {
+		"lint": "find . -name '*.php' -not -path './vendor/*' -print0 | xargs -0 -n1 php -l",
+		"psalm": "psalm.phar --no-cache --threads=1",
+		"test:unit": "phpunit -c tests/phpunit.xml"
+	},
+	"config": {
+		"platform": {
+			"php": "8.2"
+		},
+		"sort-packages": true
+	}
+}
