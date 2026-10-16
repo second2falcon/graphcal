@@ -32,7 +32,7 @@
 			position: 'fixed', top: '120px', right: '12px', zIndex: '100000', maxWidth: '420px',
 			padding: '12px 40px 12px 14px', lineHeight: '1.4',
 			background: 'var(--color-main-background, #fff)', color: 'var(--color-main-text, #222)',
-			borderLeft: '4px solid var(--color-error, #d91812)', borderRadius: 'var(--border-radius-large, 10px)',
+			borderLeft: '4px solid var(--color-border-error, var(--color-element-error, #c90000))', borderRadius: 'var(--border-radius-large, 10px)',
 			boxShadow: '0 0 6px 0 var(--color-box-shadow, rgba(0, 0, 0, .25))',
 		})
 		const close = document.createElement('button')
