@@ -203,7 +203,7 @@ foreach ([
 ] as $what => $rule) {
 	$uid = 'odd-' . md5($rule);
 	$r = dav('PUT', 'alice', "$calendar/$uid.ics", ics($uid, "DTSTART:{$soon}T090000Z\nDTEND:{$soon}T100000Z\nSUMMARY:Odd repeat\n$rule"), ['Content-Type: text/calendar']);
-	check($r['status'] === 403 && str_contains($r['body'], "isn't supported by Microsoft 365"), "refused: $what", $r['status'] . ' ' . strip_tags($r['body']));
+	check($r['status'] === 403 && str_contains($r['body'], "Microsoft 365 doesn't support this repeat pattern"), "refused: $what", $r['status'] . ' ' . strip_tags($r['body']));
 }
 pushed();
 check(!str_contains(implode('', objects('alice', $calendar)), 'Odd repeat'), 'refused events are not stored in Nextcloud');

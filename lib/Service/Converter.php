@@ -25,10 +25,7 @@ class Converter {
 	private const DAYS = ['sunday' => 'SU', 'monday' => 'MO', 'tuesday' => 'TU', 'wednesday' => 'WE', 'thursday' => 'TH', 'friday' => 'FR', 'saturday' => 'SA'];
 	private const INDEX = ['first' => 1, 'second' => 2, 'third' => 3, 'fourth' => 4, 'last' => -1];
 	private const SHOW_AS = ['free' => 'FREE', 'tentative' => 'TENTATIVE', 'busy' => 'BUSY', 'oof' => 'OOF', 'workingElsewhere' => 'WORKINGELSEWHERE'];
-	public const UNSUPPORTED_REPEAT = "This repeat pattern isn't supported by Microsoft 365 / Outlook";
-	public const SUPPORTED_REPEATS = 'Supported are: every day; every week on chosen weekdays; every month on one day of the month '
-		. 'or on the first, second, third, fourth or last weekday; every year on one date or on the first, second, third, fourth '
-		. 'or last weekday of one month; each optionally every few days/weeks/months/years and ending on a date or after a number of times.';
+	public const UNSUPPORTED_REPEAT = "Microsoft 365 doesn't support this repeat pattern";
 	private const PARTSTAT = ['accepted' => 'ACCEPTED', 'declined' => 'DECLINED', 'tentativelyAccepted' => 'TENTATIVE', 'organizer' => 'ACCEPTED'];
 
 	/* ---------------------------------------------------------------- Graph -> iCalendar */
@@ -237,9 +234,9 @@ class Converter {
 
 	/** @throws UnsupportedEvent when the RRULE has no Microsoft 365 equivalent. */
 	public static function recurrenceToGraph(VEvent $ve): array {
-		$unsupported = static fn (string $why) => new UnsupportedEvent(self::UNSUPPORTED_REPEAT . " ($why). " . self::SUPPORTED_REPEATS);
+		$unsupported = static fn (string $why) => new UnsupportedEvent(self::UNSUPPORTED_REPEAT . ": $why.");
 		if (isset($ve->RDATE)) {
-			throw $unsupported('extra dates added to the series');
+			throw $unsupported('extra dates added to a series');
 		}
 		$rule = array_change_key_case($ve->RRULE->getParts(), CASE_UPPER);
 		foreach (['BYSECOND' => 'second', 'BYMINUTE' => 'minute', 'BYHOUR' => 'hour', 'BYWEEKNO' => 'week number', 'BYYEARDAY' => 'day of the year'] as $part => $what) {
@@ -266,7 +263,7 @@ class Converter {
 		$index = static function (int $pos) use ($unsupported): string {
 			$name = array_search($pos, self::INDEX, true);
 			if ($name === false) {
-				throw $unsupported('only the first, second, third, fourth or last weekday is possible');
+				throw $unsupported('only the first to fourth or last weekday works');
 			}
 			return $name;
 		};
@@ -274,7 +271,7 @@ class Converter {
 		$relative = static function () use ($byDay, $byMonthDay, $bySetPos, $dayName, $index, $unsupported, $start): array {
 			if ($byMonthDay) {
 				if (count($byMonthDay) > 1 || (int)$byMonthDay[0] < 1 || $byDay || $bySetPos) {
-					throw $unsupported('several days of the month, or counting from the end of the month');
+					throw $unsupported('several days, or the last day, of a month');
 				}
 				return ['dayOfMonth' => (int)$byMonthDay[0]];
 			}
@@ -283,12 +280,12 @@ class Converter {
 			}
 			if (count($byDay) === 1 && preg_match('/^([+-]?\d+)([A-Z]{2})$/i', $byDay[0], $m)) {
 				if ($bySetPos) {
-					throw $unsupported('a numbered weekday combined with a position');
+					throw $unsupported('a numbered weekday with a position');
 				}
 				return ['daysOfWeek' => [$dayName($m[2])], 'index' => $index((int)$m[1])];
 			}
 			if (count($bySetPos) !== 1) {
-				throw $unsupported('several weekdays without a single position');
+				throw $unsupported('several weekdays in a month');
 			}
 			return ['daysOfWeek' => array_map($dayName, $byDay), 'index' => $index((int)$bySetPos[0])];
 		};
@@ -313,7 +310,7 @@ class Converter {
 				break;
 			case 'MONTHLY':
 				if ($byMonth) {
-					throw $unsupported('monthly limited to certain months');
+					throw $unsupported('monthly in certain months only');
 				}
 				$which = $relative();
 				$pattern = ['type' => isset($which['index']) ? 'relativeMonthly' : 'absoluteMonthly', 'interval' => $interval] + $which;

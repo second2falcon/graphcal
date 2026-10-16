@@ -85,7 +85,7 @@ This is the goal: anything a user creates in either client appears in the other 
   - Outlook users see clutter.
   - Exchange → Nextcloud can never round-trip back to the original rule.
 - **Rejecting is cheap and only affects a small edge.**
-  - The Sabre plugin refuses the PUT with a `403` and a message like: "This repeat pattern isn't supported by Microsoft 365. Use a single day of the month, or first–fourth/last weekday."
+  - The Sabre plugin refuses the PUT with a `403` and a short message like: "Microsoft 365 doesn't support this repeat pattern: several days, or the last day, of a month." GraphCal shows it in the Calendar app next to its generic "Failed to save event".
   - The Calendar web app shows that error. DAV clients (Thunderbird, iOS) show a sync error.
   - Nothing goes out of sync.
   - The only rules this affects are the three Calendar-UI options in the last table row (and rules from other clients).

@@ -48,7 +48,7 @@ Each user opens *Personal settings → GraphCal → Connect Microsoft 365*. A Mi
 ## Behaviour and limits
 
 - **Exchange is the source of truth.** For meetings organized by someone else, only your own response (accept/decline/tentative) is sent back to Exchange.
-- **Unsupported repeat patterns are rejected when you save**, rather than stored in a way Outlook can't show. Examples are several days of the month, "second to last weekday", or several months. The Calendar app then shows GraphCal's explanation of what isn't supported and which patterns are.
+- **Unsupported repeat patterns are rejected when you save**, rather than stored in a way Outlook can't show. Examples are several days of the month, "second to last weekday", or several months. The Calendar app then shows a short explanation, e.g. "Microsoft 365 doesn't support this repeat pattern: several days, or the last day, of a month."
 - **Meetings can't be moved between calendars**, because Graph has no move operation. Plain events can.
 - **Graph keeps only one reminder per event.**
 - **Shared calendars are polled every 5 minutes.** Microsoft does not send change notifications for them with delegated permissions.
