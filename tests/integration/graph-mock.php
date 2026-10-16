@@ -12,6 +12,12 @@ declare(strict_types=1);
  * Test control: GET/PUT /_state, POST /_event (create or update an event as if done in Outlook).
  */
 
+// Only ever run by PHP's built-in test server, never by a real web server serving the apps folder.
+if (PHP_SAPI !== 'cli-server') {
+	http_response_code(404);
+	exit;
+}
+
 $file = getenv('MOCK_STATE') ?: sys_get_temp_dir() . '/graphcal-mock.json';
 $me = 'alice@contoso.test';
 

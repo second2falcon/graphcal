@@ -37,6 +37,22 @@ jobs:
       - name: Psalm
         if: matrix.php == '8.2'
         run: composer run psalm
+      - name: Build the installable archive
+        if: matrix.php == '8.2'
+        run: |
+          archive=$(scripts/package.sh)
+          tar -tzf "$archive" > contents.txt
+          grep -qx 'graphcal/appinfo/info.xml' contents.txt
+          if grep -vq '^graphcal/' contents.txt || grep -qE '^graphcal/(tests|vendor|docs|\.github)/' contents.txt; then
+            echo "::error::archive must contain only the graphcal/ app folder, without tests or tooling"; exit 1
+          fi
+          echo "ARCHIVE=$archive" >> $GITHUB_ENV
+      - name: Upload the archive (for manual installation and testing)
+        if: matrix.php == '8.2'
+        uses: actions/upload-artifact@v4
+        with:
+          name: graphcal-app-archive
+          path: ${{ env.ARCHIVE }}
 
   info-xml:
     name: Validate appinfo/info.xml

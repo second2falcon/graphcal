@@ -16,6 +16,46 @@ Design and research: [docs/DESIGN.md](docs/DESIGN.md), [docs/RESEARCH.md](docs/R
 - Background jobs set to **Cron** (recommended for every Nextcloud). No separate worker or service is needed.
 - Each user's Nextcloud email address should equal their Microsoft 365 address. The app uses it to decide who organizes a meeting.
 
+## Installation
+
+GraphCal is not on the Nextcloud App Store yet. Install it manually from its release archive.
+
+### What you need
+
+`graphcal-<version>.tar.gz` contains a single folder named `graphcal` with only the app; there is no build step and nothing else to install. Get it from:
+
+- **[Releases](https://github.com/second2falcon/graphcal/releases)**, once a version has been released; or
+- **for testing an unreleased build:** any successful run of the [CI workflow](https://github.com/second2falcon/graphcal/actions/workflows/ci.yml). Open the run, download the `graphcal-app-archive` artifact (a `.zip` that contains the `.tar.gz`) and unzip it.
+
+Don't use GitHub's *Code → Download ZIP* or a `git clone`. The folder would have the wrong name (it must be exactly `graphcal`), and it would include the developer test tools.
+
+### Standard Nextcloud install
+
+Extract the archive into an apps folder that Nextcloud can write to, and enable the app. Run the commands as the web server user (`www-data` on Debian/Ubuntu; `apache` or `nginx` on some other systems). Adjust `/var/www/nextcloud` to your installation.
+
+```sh
+sudo -u www-data tar -xzf graphcal-0.1.0.tar.gz -C /var/www/nextcloud/apps
+sudo -u www-data php /var/www/nextcloud/occ app:enable graphcal
+```
+
+If your `config.php` defines `apps_paths`, use the folder marked `'writable' => true` instead of `apps`, often `custom_apps`.
+
+### Nextcloud All-in-One (Docker)
+
+AIO keeps additional apps in `custom_apps` inside the `nextcloud-aio-nextcloud` container:
+
+```sh
+docker cp graphcal-0.1.0.tar.gz nextcloud-aio-nextcloud:/tmp/
+docker exec nextcloud-aio-nextcloud sh -c 'tar -xzf /tmp/graphcal-0.1.0.tar.gz -C /var/www/html/custom_apps && chown -R www-data:www-data /var/www/html/custom_apps/graphcal'
+docker exec --user www-data nextcloud-aio-nextcloud php occ app:enable graphcal
+```
+
+The AIO test in CI installs GraphCal exactly this way.
+
+### Updating
+
+Remove the old `graphcal` folder, extract the new archive in its place and run `occ upgrade`. On AIO, prefix the commands with `docker exec`, as above. Settings, tokens and sync state are kept, because they live in the database.
+
 ## Setup
 
 ### 1. Register an app in Microsoft Entra ID (once, as tenant admin)
@@ -67,7 +107,10 @@ Once a user connects, the events of their synced calendars are exchanged with Mi
 ```sh
 composer install
 composer run lint && composer run test:unit && composer run psalm
+scripts/package.sh   # builds build/graphcal-<version>.tar.gz
 ```
+
+To publish a release, set `<version>` in `appinfo/info.xml`, add a `## <version>` section to `CHANGELOG.md` and push a matching tag (`git tag v0.1.0 && git push origin v0.1.0`). The release workflow then attaches the archive to a GitHub release.
 
 The end-to-end tests run against a real Nextcloud with a Graph mock (`tests/integration/`). GitHub Actions runs them on a native install of Nextcloud 33 (SQLite), 34 (SQLite) and 35 (PostgreSQL), on Nextcloud 35 behind nginx + PHP-FPM, and on the real **Nextcloud All-in-One** Docker containers (Apache + PHP-FPM, PostgreSQL, Redis). They cover the sign-in popup, mirroring in both directions, invitation suppression, replies, deletes, refusing repeat patterns Microsoft 365 can't store, the webhook and disconnecting, plus a headless-browser test of the settings pages and the Calendar app. Each run uploads screenshots of every step (admin Entra ID settings, personal settings, sign-in, Calendar views) as a build artifact.
 

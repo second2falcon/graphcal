@@ -11,6 +11,11 @@ declare(strict_types=1);
  * Expects users alice/bob (password "Graphcal-Test-Pass-7731") and the app configured against the mock (see setup.sh).
  */
 
+if (PHP_SAPI !== 'cli') {
+	http_response_code(404);
+	exit;
+}
+
 $nc = rtrim(getenv('NC_URL') ?: 'http://127.0.0.1:8080', '/');
 $mock = rtrim(getenv('MOCK_URL') ?: 'http://127.0.0.1:8090', '/');
 $dir = getenv('NC_DIR') ?: '';

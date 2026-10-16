@@ -1,0 +1,37 @@
+# SPDX-FileCopyrightText: 2026 GraphCal contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Push a tag like v0.1.0 (matching <version> in appinfo/info.xml) to publish a GitHub release
+# with graphcal-<version>.tar.gz, the archive for manual installation (see README).
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Check that the tag matches appinfo/info.xml
+        run: |
+          version=$(sed -n 's:.*<version>\(.*\)</version>.*:\1:p' appinfo/info.xml)
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match version $version in appinfo/info.xml"; exit 1
+          fi
+          echo "VERSION=$version" >> $GITHUB_ENV
+      - name: Build the archive
+        run: scripts/package.sh
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Release notes: the "## <version>" section of CHANGELOG.md.
+          awk -v v="## $VERSION" '$0 == v {on=1; next} /^## / {on=0} on' CHANGELOG.md > notes.md
+          prerelease=$([[ "$VERSION" == *-* ]] && echo --prerelease || true)
+          gh release create "$GITHUB_REF_NAME" "build/graphcal-$VERSION.tar.gz" \
+            --title "GraphCal $VERSION" --notes-file notes.md $prerelease

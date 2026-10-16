@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
 # Start Nextcloud All-in-One from its official manual-install compose file and install GraphCal
-# into custom_apps, like an app installed from the App Store.
+# from its release archive into custom_apps, exactly as the README's manual installation does.
 # Usage: ADMIN_PASS=... tests/aio/start.sh /path/to/all-in-one /path/to/graphcal
 set -euo pipefail
 AIO_DIR=$1
@@ -34,7 +34,8 @@ for _ in $(seq 1 150); do
 done
 occ status
 
-docker cp "$APP_DIR" nextcloud-aio-nextcloud:/var/www/html/custom_apps/graphcal
-docker exec nextcloud-aio-nextcloud chown -R www-data:www-data /var/www/html/custom_apps/graphcal
+archive=$("$APP_DIR/scripts/package.sh" | tail -1)
+docker cp "$APP_DIR/$archive" nextcloud-aio-nextcloud:/tmp/graphcal.tar.gz
+docker exec nextcloud-aio-nextcloud sh -c 'tar -xzf /tmp/graphcal.tar.gz -C /var/www/html/custom_apps && chown -R www-data:www-data /var/www/html/custom_apps/graphcal'
 occ app:enable graphcal
 occ app:disable firstrunwizard || true   # its welcome dialog would cover the pages the browser test uses
