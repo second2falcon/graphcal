@@ -120,6 +120,30 @@ if (app?.ok()) {
 	await bob.goto(`${nc}/index.php/apps/calendar/dayGridMonth/now`)
 	await bob.locator('.fc-event').first().waitFor({ timeout: 20000 }).catch(() => {})
 	await shot(bob, 'calendar-month')
+
+	console.log('Calendar app: a repeat pattern Microsoft 365 cannot store is refused')
+	await bob.goto(`${nc}/index.php/apps/calendar/timeGridWeek/now`)
+	await bob.getByRole('button', { name: 'Event' }).first().click()
+	await bob.getByPlaceholder('Title').waitFor()
+	// Pick the synced Outlook calendar ("Calendar") instead of the default "Personal".
+	await bob.getByText('Personal', { exact: true }).last().click()
+	await bob.locator('.v-popper__popper:visible').getByText('Calendar', { exact: true }).click()
+	await bob.getByPlaceholder('Title').fill('Payroll run')
+	await bob.getByText('Does not repeat').locator('xpath=..').getByRole('button').first().click()
+	const repeat = bob.getByRole('dialog', { name: 'Repeat event' })
+	await repeat.getByRole('combobox').click()
+	await bob.getByRole('option', { name: 'month', exact: true }).click()
+	// The start day is preselected; adding the 1st makes "every month on two days" (BYMONTHDAY=1,<start>).
+	await repeat.getByRole('button', { name: '1', exact: true }).click()
+	await shot(bob, 'calendar-unsupported-repeat-chosen')
+	await repeat.getByRole('button', { name: 'Set repetition' }).click()
+	await bob.getByRole('button', { name: 'Save', exact: true }).click()
+	const refused = bob.locator('.toastify', { hasText: 'Failed to save event' })
+	await refused.waitFor({ timeout: 10000 }).catch(() => {})
+	check(await refused.isVisible(), 'saving "monthly on two days" in the Outlook calendar is refused')
+	await shot(bob, 'calendar-unsupported-repeat-refused')
+	const sent = JSON.parse(await (await fetch(`${mock}/_state`)).text()).requests.filter((r) => r.body?.subject === 'Payroll run')
+	check(sent.length === 0, 'the refused event was not sent to Exchange', JSON.stringify(sent))
 } else {
 	console.log('       Calendar app not installed, skipped')
 }
