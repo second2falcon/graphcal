@@ -35,7 +35,8 @@ Microsoft, Microsoft 365, Outlook and Exchange are trademarks of the Microsoft g
 	</background-jobs>
 	<settings>
 		<admin>OCA\GraphCal\Settings\Admin</admin>
+		<admin-section>OCA\GraphCal\Settings\Section</admin-section>
 		<personal>OCA\GraphCal\Settings\Personal</personal>
-		<personal-section>OCA\GraphCal\Settings\PersonalSection</personal-section>
+		<personal-section>OCA\GraphCal\Settings\Section</personal-section>
 	</settings>
 </info>

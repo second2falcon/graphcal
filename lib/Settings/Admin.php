@@ -32,7 +32,7 @@ class Admin implements ISettings {
 	}
 
 	public function getSection(): string {
-		return 'groupware';
+		return 'graphcal';
 	}
 
 	public function getPriority(): int {

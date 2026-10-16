@@ -7,14 +7,13 @@ declare(strict_types=1);
 
 namespace OCA\GraphCal\Settings;
 
-use OCP\IL10N;
 use OCP\IURLGenerator;
 use OCP\Settings\IIconSection;
 
-class PersonalSection implements IIconSection {
+/** The "GraphCal" tab (named like the app admins installed), in both Administration and Personal settings. */
+class Section implements IIconSection {
 	public function __construct(
 		private IURLGenerator $urlGenerator,
-		private IL10N $l,
 	) {
 	}
 
@@ -23,7 +22,7 @@ class PersonalSection implements IIconSection {
 	}
 
 	public function getName(): string {
-		return $this->l->t('Microsoft 365 calendar');
+		return 'GraphCal';
 	}
 
 	public function getPriority(): int {

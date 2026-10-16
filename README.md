@@ -22,7 +22,7 @@ Design and research: [docs/DESIGN.md](docs/DESIGN.md), [docs/RESEARCH.md](docs/R
 
 1. Go to Entra admin center → **App registrations → New registration**.
    - Supported account types: **Single tenant**.
-   - Redirect URI: platform **Web**, and the URL shown in Nextcloud under *Administration settings → Groupware → GraphCal*. It looks like `https://cloud.example.com/index.php/apps/graphcal/oauth/callback`.
+   - Redirect URI: platform **Web**, and the URL shown in Nextcloud under *Administration settings → GraphCal*. It looks like `https://cloud.example.com/index.php/apps/graphcal/oauth/callback`.
 2. **Certificates & secrets → New client secret.** Copy its value.
 3. **API permissions → Add → Microsoft Graph → Delegated:** `User.Read`, `Calendars.ReadWrite`, `Calendars.ReadWrite.Shared` and `offline_access`.
 4. Click **Grant admin consent for <tenant>**. The default user-consent policy of new tenants blocks calendar permissions, so without this step users can't connect.
@@ -31,7 +31,7 @@ You can also reuse the registration that Nextcloud Mail uses for Outlook: add th
 
 ### 2. Configure Nextcloud
 
-Enter the tenant ID, client ID and client secret under *Administration settings → Groupware → GraphCal*. The secret is stored encrypted.
+Enter the tenant ID, client ID and client secret under *Administration settings → GraphCal*. The secret is stored encrypted.
 
 ### 3. Background jobs
 
@@ -43,7 +43,7 @@ Nothing extra to install. GraphCal does its work inside Nextcloud:
 
 ### 4. Users connect
 
-Each user opens *Personal settings → Microsoft 365 calendar → Connect Microsoft 365*. A Microsoft sign-in popup opens, and after signing in their Outlook calendars appear in the Calendar app.
+Each user opens *Personal settings → GraphCal → Connect Microsoft 365*. A Microsoft sign-in popup opens, and after signing in their Outlook calendars appear in the Calendar app.
 
 ## Behaviour and limits
 
@@ -69,7 +69,7 @@ composer install
 composer run lint && composer run test:unit && composer run psalm
 ```
 
-The end-to-end tests run against a real Nextcloud with a Graph mock (`tests/integration/`). GitHub Actions runs them on Nextcloud 33 (SQLite), 34 (SQLite) and 35 (PostgreSQL). They cover the sign-in popup, mirroring in both directions, invitation suppression, replies, deletes, the webhook and disconnecting, plus a headless-browser test of the settings pages and the Calendar app. Each run uploads screenshots of every step (admin Entra ID settings, personal settings, sign-in, Calendar views) as a build artifact.
+The end-to-end tests run against a real Nextcloud with a Graph mock (`tests/integration/`). GitHub Actions runs them on a native install of Nextcloud 33 (SQLite), 34 (SQLite) and 35 (PostgreSQL), on Nextcloud 35 behind nginx + PHP-FPM, and on the real **Nextcloud All-in-One** Docker containers (Apache + PHP-FPM, PostgreSQL, Redis). They cover the sign-in popup, mirroring in both directions, invitation suppression, replies, deletes, refusing repeat patterns Microsoft 365 can't store, the webhook and disconnecting, plus a headless-browser test of the settings pages and the Calendar app. Each run uploads screenshots of every step (admin Entra ID settings, personal settings, sign-in, Calendar views) as a build artifact.
 
 ## License
 

@@ -8,13 +8,14 @@ declare(strict_types=1);
 /*
  * End-to-end test against a real Nextcloud (php -S) and the Graph mock (tests/integration/graph-mock.php).
  * Usage: NC_DIR=/path/to/server NC_URL=http://127.0.0.1:8080 MOCK_URL=http://127.0.0.1:8090 php tests/integration/run.php
- * Expects users alice/bob (password "Secret-Pass-123") and the app configured against the mock (see setup.sh).
+ * Expects users alice/bob (password "Graphcal-Test-Pass-7731") and the app configured against the mock (see setup.sh).
  */
 
 $nc = rtrim(getenv('NC_URL') ?: 'http://127.0.0.1:8080', '/');
 $mock = rtrim(getenv('MOCK_URL') ?: 'http://127.0.0.1:8090', '/');
-$dir = getenv('NC_DIR') ?: die("NC_DIR not set\n");
-const PASS = 'Secret-Pass-123';
+$dir = getenv('NC_DIR') ?: '';
+getenv('OCC') || $dir || die("NC_DIR or OCC not set\n");
+const PASS = 'Graphcal-Test-Pass-7731';
 // Behind PHP-FPM, pulls run right after the response; under php -S they wait for cron.
 $fpm = getenv('NC_FPM') === '1';
 $failures = 0;
@@ -46,7 +47,8 @@ function check(bool $ok, string $what, string $detail = ''): void {
 
 function occ(string $args): string {
 	global $dir;
-	return (string)shell_exec('php ' . escapeshellarg("$dir/occ") . " $args 2>&1");
+	$occ = getenv('OCC') ?: 'php ' . escapeshellarg("$dir/occ");
+	return (string)shell_exec("$occ $args 2>&1");
 }
 
 /** Run GraphCal's queued background jobs, as Nextcloud's cron would. */
@@ -188,8 +190,29 @@ $put = dav('PUT', 'alice', "$calendar/ical-invite1.ics", $accepted, ['Content-Ty
 pushed();
 check(count(mockRequests('POST', '#^/v1\.0/me/events/invite1/accept$#')) === 1, 'accepting an invitation sends the reply through Exchange', (string)$put['status']);
 
-$bad = dav('PUT', 'alice', "$calendar/odd.ics", ics('odd', "DTSTART:{$soon}T090000Z\nDTEND:{$soon}T100000Z\nSUMMARY:Odd\nRRULE:FREQ=MONTHLY;BYMONTHDAY=1,15"), ['Content-Type: text/calendar']);
-check($bad['status'] === 403 && str_contains($bad['body'], "isn't supported by Microsoft 365"), 'unsupported repeat rule is rejected', $bad['status'] . ' ' . $bad['body']);
+echo "Repeat patterns Microsoft 365 can't store are refused\n";
+$createdBefore = count(mockRequests('POST', '#^/v1\.0/me/calendars/cal1/events$#'));
+foreach ([
+	'several days of the month' => "RRULE:FREQ=MONTHLY;BYMONTHDAY=1,15",
+	'second-to-last weekday' => "RRULE:FREQ=MONTHLY;BYDAY=WE;BYSETPOS=-2",
+	'fifth weekday of the month' => "RRULE:FREQ=MONTHLY;BYDAY=5FR",
+	'last day of the month' => "RRULE:FREQ=MONTHLY;BYMONTHDAY=-1",
+	'several months a year' => "RRULE:FREQ=YEARLY;BYMONTH=1,7",
+	'every few hours' => "RRULE:FREQ=HOURLY;INTERVAL=4",
+	'extra dates (RDATE)' => "RRULE:FREQ=WEEKLY\nRDATE:{$soon}T150000Z",
+] as $what => $rule) {
+	$uid = 'odd-' . md5($rule);
+	$r = dav('PUT', 'alice', "$calendar/$uid.ics", ics($uid, "DTSTART:{$soon}T090000Z\nDTEND:{$soon}T100000Z\nSUMMARY:Odd repeat\n$rule"), ['Content-Type: text/calendar']);
+	check($r['status'] === 403 && str_contains($r['body'], "isn't supported by Microsoft 365"), "refused: $what", $r['status'] . ' ' . strip_tags($r['body']));
+}
+pushed();
+check(!str_contains(implode('', objects('alice', $calendar)), 'Odd repeat'), 'refused events are not stored in Nextcloud');
+check(count(mockRequests('POST', '#^/v1\.0/me/calendars/cal1/events$#')) === $createdBefore, 'refused events are not sent to Exchange');
+$r = dav('PUT', 'alice', "$calendar/board.ics", ics('board', "DTSTART;TZID=Europe/Amsterdam:{$soon}T160000\nDTEND;TZID=Europe/Amsterdam:{$soon}T170000\nSUMMARY:Board meeting\nRRULE:FREQ=MONTHLY;BYDAY=2TU;COUNT=6"), ['Content-Type: text/calendar']);
+pushed();
+$created = mockRequests('POST', '#^/v1\.0/me/calendars/cal1/events$#');
+check($r['status'] === 201 && (end($created)['body']['recurrence']['pattern'] ?? null) === ['type' => 'relativeMonthly', 'interval' => 1, 'daysOfWeek' => ['tuesday'], 'index' => 'second'],
+	'a supported pattern (2nd Tuesday) is accepted and sent to Exchange', $r['status'] . ' ' . json_encode(end($created)['body']['recurrence'] ?? null));
 
 $move = dav('MOVE', 'alice', "$calendar/meeting-1.ics", null, ['Destination: ' . $nc . '/remote.php/dav/calendars/alice/personal/meeting-1.ics']);
 check($move['status'] === 403, 'meetings cannot be moved out of an Outlook calendar', (string)$move['status']);

@@ -4,7 +4,7 @@
 // Browser test of the settings pages, the sign-in popup and the Calendar app, against the same setup
 // as run.php. Saves a screenshot of every step to SCREENSHOT_DIR (uploaded by CI as an artifact).
 // Usage: NC_DIR=/path/to/server NC_URL=http://127.0.0.1:8080 MOCK_URL=http://127.0.0.1:8090 node browser.mjs
-import { execFileSync } from 'node:child_process'
+import { execFileSync, execSync } from 'node:child_process'
 import { mkdirSync } from 'node:fs'
 import { chromium } from 'playwright'
 
@@ -46,10 +46,11 @@ async function outlook(event) {
 const day = (offset, time) => `${new Date(Date.now() + offset * 86400000).toISOString().slice(0, 10)}T${time}.0000000`
 
 console.log('Admin settings (Entra ID app registration)')
-const admin = await login('admin', 'admin')
-await admin.goto(`${nc}/index.php/settings/admin/groupware`)
+const admin = await login('admin', process.env.ADMIN_PASS ?? 'admin')
+await admin.goto(`${nc}/index.php/settings/admin/graphcal`)
 const section = admin.locator('#graphcal-admin')
 await section.waitFor()
+check(await admin.getByRole('link', { name: 'GraphCal' }).first().isVisible(), 'own tab in Administration settings')
 check((await admin.inputValue('#graphcal-admin input[readonly]')).endsWith('/apps/graphcal/oauth/callback'), 'redirect URI is shown')
 await admin.fill('#graphcal-admin-form input[name="tenant_id"]', '72f988bf-86f1-41af-91ab-2d7cd011db47')
 await admin.fill('#graphcal-admin-form input[name="client_id"]', '3fa85f64-5717-4562-b3fc-2c963f66afa6')
@@ -57,7 +58,7 @@ await admin.click('#graphcal-admin-form button[type="submit"]')
 await admin.locator('#graphcal-admin-msg', { hasText: 'Saved' }).waitFor({ timeout: 10000 })
 check(true, 'admin form saves')
 await shot(admin, 'admin-entra-app-registration', section)
-await shot(admin, 'admin-groupware-page')
+await shot(admin, 'admin-settings-tab')
 
 console.log('Personal settings and sign-in popup')
 await outlook({ id: 'demo-meeting', subject: 'Quarterly planning', isAllDay: false, isOrganizer: false,
@@ -76,7 +77,7 @@ await outlook({ id: 'demo-series', type: 'seriesMaster', subject: 'Weekly stand-
 	originalStartTimeZone: 'W. Europe Standard Time',
 	recurrence: { pattern: { type: 'daily', interval: 1 }, range: { type: 'numbered', numberOfOccurrences: 10, startDate: day(0, '00:00:00').slice(0, 10) } } })
 
-const bob = await login('bob', 'Secret-Pass-123')
+const bob = await login('bob', 'Graphcal-Test-Pass-7731')
 await bob.goto(`${nc}/index.php/settings/user/graphcal`)
 const connect = bob.getByRole('button', { name: 'Connect Microsoft 365' })
 await connect.waitFor()
@@ -96,7 +97,9 @@ await shot(failed, 'sign-in-error-page')
 await failed.close()
 
 console.log('Calendar app')
-if (process.env.NC_DIR) {
+if (process.env.OCC) {
+	execSync(`${process.env.OCC} background-job:worker --once 'OCA\\GraphCal\\BackgroundJob\\DeltaJob'`)
+} else if (process.env.NC_DIR) {
 	// What Nextcloud's cron does (php -S has no PHP-FPM to pull right after the sign-in response).
 	execFileSync('php', [`${process.env.NC_DIR}/occ`, 'background-job:worker', '--once', 'OCA\\GraphCal\\BackgroundJob\\DeltaJob'])
 }
