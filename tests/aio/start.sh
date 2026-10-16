@@ -34,8 +34,9 @@ for _ in $(seq 1 150); do
 done
 occ status
 
+# The same commands as in the README's AIO installation section.
 archive=$("$APP_DIR/scripts/package.sh" | tail -1)
 docker cp "$APP_DIR/$archive" nextcloud-aio-nextcloud:/tmp/graphcal.tar.gz
-docker exec nextcloud-aio-nextcloud sh -c 'tar -xzf /tmp/graphcal.tar.gz -C /var/www/html/custom_apps && chown -R www-data:www-data /var/www/html/custom_apps/graphcal'
+docker exec nextcloud-aio-nextcloud sh -c 'mkdir -p /var/www/html/custom_apps && cd /var/www/html/custom_apps && rm -rf graphcal && tar -xzf /tmp/graphcal.tar.gz && chown -R www-data:www-data graphcal && rm /tmp/graphcal.tar.gz'
 occ app:enable graphcal
 occ app:disable firstrunwizard || true   # its welcome dialog would cover the pages the browser test uses

@@ -31,10 +31,11 @@ Don't use GitHub's *Code → Download ZIP* or a `git clone`. The folder would ha
 
 ### Standard Nextcloud install
 
-Extract the archive into an apps folder that Nextcloud can write to, and enable the app. Run the commands as the web server user (`www-data` on Debian/Ubuntu; `apache` or `nginx` on some other systems). Adjust `/var/www/nextcloud` to your installation.
+Extract the archive into an apps folder that Nextcloud can write to, and enable the app. Run the commands as the web server user (`www-data` on Debian/Ubuntu; `apache` or `nginx` on some other systems). Adjust `/var/www/nextcloud` to your installation, and put the archive somewhere the web server user can read, such as `/tmp`.
 
 ```sh
-sudo -u www-data tar -xzf graphcal-0.1.0.tar.gz -C /var/www/nextcloud/apps
+sudo -u www-data rm -rf /var/www/nextcloud/apps/graphcal     # removes an older version, if any
+sudo -u www-data tar -xzf /tmp/graphcal-0.1.0.tar.gz -C /var/www/nextcloud/apps
 sudo -u www-data php /var/www/nextcloud/occ app:enable graphcal
 ```
 
@@ -45,16 +46,16 @@ If your `config.php` defines `apps_paths`, use the folder marked `'writable' => 
 AIO keeps additional apps in `custom_apps` inside the `nextcloud-aio-nextcloud` container:
 
 ```sh
-docker cp graphcal-0.1.0.tar.gz nextcloud-aio-nextcloud:/tmp/
-docker exec nextcloud-aio-nextcloud sh -c 'tar -xzf /tmp/graphcal-0.1.0.tar.gz -C /var/www/html/custom_apps && chown -R www-data:www-data /var/www/html/custom_apps/graphcal'
-docker exec --user www-data nextcloud-aio-nextcloud php occ app:enable graphcal
+sudo docker cp graphcal-0.1.0.tar.gz nextcloud-aio-nextcloud:/tmp/graphcal.tar.gz
+sudo docker exec nextcloud-aio-nextcloud sh -c 'mkdir -p /var/www/html/custom_apps && cd /var/www/html/custom_apps && rm -rf graphcal && tar -xzf /tmp/graphcal.tar.gz && chown -R www-data:www-data graphcal && rm /tmp/graphcal.tar.gz'
+sudo docker exec --user www-data nextcloud-aio-nextcloud php occ app:enable graphcal
 ```
 
-The AIO test in CI installs GraphCal exactly this way.
+`rm -rf graphcal` removes an older version, if any. The AIO test in CI installs GraphCal with exactly these commands.
 
 ### Updating
 
-Remove the old `graphcal` folder, extract the new archive in its place and run `occ upgrade`. On AIO, prefix the commands with `docker exec`, as above. Settings, tokens and sync state are kept, because they live in the database.
+Run the same commands with the new archive; they replace the old `graphcal` folder, so no stale files remain. Then run `occ upgrade`: `sudo -u www-data php /var/www/nextcloud/occ upgrade`, or on AIO `sudo docker exec --user www-data nextcloud-aio-nextcloud php occ upgrade`. Settings, tokens and sync state are kept, because they live in the database.
 
 ## Setup
 
