@@ -106,11 +106,11 @@ jobs:
       - name: End-to-end tests
         run: NC_DIR=$PWD/server php server/apps/graphcal/tests/integration/run.php
       - name: Browser tests (settings pages, sign-in popup)
-        working-directory: server/apps/graphcal
+        working-directory: server/apps/graphcal/tests/integration
         run: |
-          npm install --no-save --no-audit --no-fund playwright@1.56.1
+          npm install --no-package-lock --no-audit --no-fund
           node node_modules/playwright/cli.js install --with-deps chromium
-          SCREENSHOT=$RUNNER_TEMP/settings.png node tests/integration/browser.mjs
+          SCREENSHOT=$RUNNER_TEMP/settings.png node browser.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
