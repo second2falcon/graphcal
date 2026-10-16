@@ -109,7 +109,7 @@ jobs:
         working-directory: server/apps/graphcal
         run: |
           npm install --no-save --no-audit --no-fund playwright@1.56.1
-          npx playwright install --with-deps chromium
+          node node_modules/playwright/cli.js install --with-deps chromium
           SCREENSHOT=$RUNNER_TEMP/settings.png node tests/integration/browser.mjs
       - uses: actions/upload-artifact@v4
         if: always()
