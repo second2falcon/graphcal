@@ -11,12 +11,15 @@ use DateTimeImmutable;
 use DateTimeZone;
 use OCA\DAV\CalDAV\CalDavBackend;
 use OCA\GraphCal\BackgroundJob\DeltaJob;
+use OCA\GraphCal\BackgroundJob\PushJob;
 use OCA\GraphCal\Db\Store;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\IJobList;
 use OCP\Config\IUserConfig;
 use OCP\IURLGenerator;
 use OCP\IUserManager;
+use OCP\Lock\ILockingProvider;
+use OCP\Lock\LockedException;
 use OCP\Security\ISecureRandom;
 use Psr\Log\LoggerInterface;
 use Sabre\CalDAV\Xml\Property\SupportedCalendarComponentSet;
@@ -47,6 +50,7 @@ class SyncService {
 		private IUserConfig $userConfig,
 		private IURLGenerator $urlGenerator,
 		private IUserManager $userManager,
+		private ILockingProvider $locking,
 		private ISecureRandom $random,
 		private ITimeFactory $time,
 		private LoggerInterface $logger,
@@ -96,7 +100,7 @@ class SyncService {
 			$ncId = $this->calDav->createCalendar('principals/users/' . $userId, 'graphcal-' . substr(md5($row['owner'] . $row['graph_id']), 0, 12), $props);
 		}
 		$this->store->updateCalendar($id, ['enabled' => true, 'nc_calendar_id' => (int)$ncId, 'delta_link' => null]);
-		$this->queuePull($userId);
+		$this->pullSoon($userId);
 	}
 
 	private function disable(array $row): void {
@@ -131,9 +135,59 @@ class SyncService {
 		}
 	}
 
+	/**
+	 * Pull right after the current response when PHP-FPM lets us (Graph needs webhook answers within
+	 * 3 seconds); otherwise the queued job runs with Nextcloud's cron.
+	 */
+	public function pullSoon(string $userId): void {
+		$this->queuePull($userId);
+		if (Deferred::canFinishEarly()) {
+			Deferred::afterResponse(fn () => $this->runQueued(DeltaJob::class, $userId, fn () => $this->pull($userId)));
+		}
+	}
+
+	/** Push right after the current response; the queued job is the fallback for cron. */
+	public function pushSoon(int $ncId, string $uri): void {
+		$args = ['calendar' => $ncId, 'uri' => $uri];
+		if (!$this->jobList->has(PushJob::class, $args)) {
+			$this->jobList->add(PushJob::class, $args);
+		}
+		// ponytail: without PHP-FPM the client waits for this push (~1 s); still beats waiting for cron.
+		Deferred::afterResponse(fn () => $this->runQueued(PushJob::class, $args, fn () => $this->push($ncId, $uri)));
+	}
+
+	/** Run a queued job's work now; on failure leave it queued so cron retries. */
+	private function runQueued(string $job, mixed $args, callable $work): void {
+		if (!$this->jobList->has($job, $args)) {
+			return; // already done by cron or an earlier request
+		}
+		$this->jobList->remove($job, $args);
+		try {
+			$work();
+		} catch (\Throwable $e) {
+			$this->jobList->add($job, $args);
+			throw $e;
+		}
+	}
+
 	/* ================================================================ Graph -> Nextcloud */
 
 	public function pull(string $userId): void {
+		$lock = 'graphcal/pull/' . $userId;
+		try {
+			$this->locking->acquireLock($lock, ILockingProvider::LOCK_EXCLUSIVE);
+		} catch (LockedException) {
+			$this->queuePull($userId); // another pull is running; make sure changes after it are picked up
+			return;
+		}
+		try {
+			$this->pullCalendars($userId);
+		} finally {
+			$this->locking->releaseLock($lock, ILockingProvider::LOCK_EXCLUSIVE);
+		}
+	}
+
+	private function pullCalendars(string $userId): void {
 		$me = $this->ms->msEmail($userId);
 		foreach ($this->store->syncedCalendars($userId) as $cal) {
 			try {

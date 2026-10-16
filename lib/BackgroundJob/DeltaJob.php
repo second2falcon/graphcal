@@ -11,7 +11,7 @@ use OCA\GraphCal\Service\SyncService;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\QueuedJob;
 
-/** Pulls Exchange changes for one user (queued by change notifications, the poller and settings). */
+/** Pulls Exchange changes for one user; fallback for SyncService::pullSoon, run by Nextcloud's cron. */
 class DeltaJob extends QueuedJob {
 	public function __construct(
 		ITimeFactory $time,

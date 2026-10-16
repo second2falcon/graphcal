@@ -25,7 +25,8 @@
 		</p>
 	</form>
 	<p class="settings-hint">
-		For changes to reach Outlook within seconds, run a dedicated background worker, for example as a systemd service:<br>
-		<code>occ background-job:worker 'OCA\GraphCal\BackgroundJob\PushJob' 'OCA\GraphCal\BackgroundJob\DeltaJob'</code>
+		Changes are synced right after they happen; no extra service is needed. Set background jobs to
+		<strong>Cron</strong> (Basic settings) so the 5-minute safety-net sync and retries run reliably.
+		Nextcloud must be reachable over HTTPS from the internet for Outlook changes to arrive within seconds.
 	</p>
 </div>

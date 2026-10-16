@@ -8,6 +8,7 @@ set -euo pipefail
 : "${NC_DIR:?}"
 occ() { php "$NC_DIR/occ" "$@"; }
 
+occ background:cron   # jobs only run when the test says so (no AJAX cron on page loads)
 occ config:system:set trusted_domains 1 --value=127.0.0.1
 occ config:system:set overwrite.cli.url --value=http://127.0.0.1:8080
 occ config:system:set allow_local_remote_servers --value=true --type=boolean
@@ -24,7 +25,10 @@ done
 
 rm -f /tmp/graphcal-mock.json /tmp/graphcal-mock.json.lock
 MOCK_STATE=/tmp/graphcal-mock.json php -S 127.0.0.1:8090 "$(dirname "$0")/graph-mock.php" >/tmp/graphcal-mock.log 2>&1 &
-PHP_CLI_SERVER_WORKERS=4 php -S 127.0.0.1:8080 -t "$NC_DIR" >/tmp/graphcal-nc.log 2>&1 &
+# NC_WEB=external: Nextcloud is already served on :8080 (e.g. nginx + PHP-FPM).
+if [ "${NC_WEB:-}" != external ]; then
+	PHP_CLI_SERVER_WORKERS=4 php -S 127.0.0.1:8080 -t "$NC_DIR" >/tmp/graphcal-nc.log 2>&1 &
+fi
 for _ in $(seq 1 30); do
 	curl -sf http://127.0.0.1:8080/status.php >/dev/null && curl -s http://127.0.0.1:8090/_state >/dev/null && exit 0
 	sleep 1

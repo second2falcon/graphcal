@@ -15,6 +15,8 @@ $nc = rtrim(getenv('NC_URL') ?: 'http://127.0.0.1:8080', '/');
 $mock = rtrim(getenv('MOCK_URL') ?: 'http://127.0.0.1:8090', '/');
 $dir = getenv('NC_DIR') ?: die("NC_DIR not set\n");
 const PASS = 'Secret-Pass-123';
+// Behind PHP-FPM, pulls run right after the response; under php -S they wait for cron.
+$fpm = getenv('NC_FPM') === '1';
 $failures = 0;
 
 function http(string $method, string $url, ?string $body = null, array $headers = [], ?string $auth = null, ?string $cookies = null): array {
@@ -47,9 +49,29 @@ function occ(string $args): string {
 	return (string)shell_exec('php ' . escapeshellarg("$dir/occ") . " $args 2>&1");
 }
 
-/** Process all queued jobs, like the dedicated worker would. */
-function work(): void {
+/** Run GraphCal's queued background jobs, as Nextcloud's cron would. */
+function cron(): void {
 	occ("background-job:worker --once 'OCA\\GraphCal\\BackgroundJob\\PushJob' 'OCA\\GraphCal\\BackgroundJob\\DeltaJob'");
+}
+
+/** Behind PHP-FPM, wait for work done after the response; otherwise run the queued jobs like cron. */
+function settle(callable $done): void {
+	global $fpm;
+	if (!$fpm) {
+		cron();
+		return;
+	}
+	for ($i = 0; $i < 40 && !$done(); $i++) {
+		usleep(250000);
+	}
+}
+
+/** Pushes never wait for cron: under php -S they finish before the response, behind PHP-FPM just after. */
+function pushed(): void {
+	global $fpm;
+	for ($i = 0; $fpm && $i < 40 && str_contains(occ('background-job:list'), 'PushJob'); $i++) {
+		usleep(250000);
+	}
 }
 
 function mockState(): array {
@@ -126,7 +148,7 @@ check(count(mockState()['subscriptions']) === 1, 'change-notification subscripti
 $calendar = 'graphcal-' . substr(md5('cal1'), 0, 12);
 
 echo "Outlook -> Nextcloud\n";
-work();
+settle(fn () => count(objects('alice', $calendar)) >= 3);
 $objs = objects('alice', $calendar);
 $all = implode("\n", $objs);
 check(count($objs) === 3, 'three events mirrored into Nextcloud', count($objs) . " objects:\n" . $all);
@@ -142,7 +164,9 @@ $put = dav('PUT', 'alice', "$calendar/meeting-1.ics", $meeting, ['Content-Type: 
 check($put['status'] === 201, 'meeting created in the synced calendar', (string)$put['status']);
 check(!str_contains(implode('', objects('bob', 'personal')), 'Project kickoff'), 'Nextcloud did not deliver the invitation itself');
 check(!str_contains(implode('', objects('alice', $calendar)), 'SCHEDULE-STATUS=1.2'), 'Nextcloud did not schedule (no SCHEDULE-STATUS written)');
-work();
+// No job runs here: the push happens right after the request, without a worker or cron.
+pushed();
+check(!str_contains(occ('background-job:list'), 'PushJob'), 'pushed right after saving, nothing left for cron');
 $created = mockRequests('POST', '#^/v1\.0/me/calendars/cal1/events$#');
 $attendees = array_map(fn ($a) => $a['emailAddress']['address'], $created[0]['body']['attendees'] ?? []);
 check(count($created) === 1 && $attendees === ['bob@contoso.test', 'carol@external.test'], 'meeting created in Exchange with both attendees', json_encode($created));
@@ -154,14 +178,14 @@ check(str_contains(implode('', objects('bob', 'personal')), 'Local meeting'), 'N
 
 echo "Changes and replies\n";
 $put = dav('PUT', 'alice', "$calendar/meeting-1.ics", str_replace('Project kickoff', 'Project kickoff (moved)', $meeting), ['Content-Type: text/calendar']);
-work();
+pushed();
 $patches = mockRequests('PATCH', '#^/v1\.0/me/events/ev\d+$#');
 check(count($patches) === 1 && ($patches[0]['body']['subject'] ?? '') === 'Project kickoff (moved)', 'update sent as PATCH', json_encode($patches));
 
 $inviteObj = array_values(array_filter(objects('alice', $calendar), fn ($o) => str_contains($o, 'Budget review')))[0] ?? '';
 $accepted = str_replace('PARTSTAT=NEEDS-ACTION', 'PARTSTAT=ACCEPTED', $inviteObj);
 $put = dav('PUT', 'alice', "$calendar/ical-invite1.ics", $accepted, ['Content-Type: text/calendar']);
-work();
+pushed();
 check(count(mockRequests('POST', '#^/v1\.0/me/events/invite1/accept$#')) === 1, 'accepting an invitation sends the reply through Exchange', (string)$put['status']);
 
 $bad = dav('PUT', 'alice', "$calendar/odd.ics", ics('odd', "DTSTART:{$soon}T090000Z\nDTEND:{$soon}T100000Z\nSUMMARY:Odd\nRRULE:FREQ=MONTHLY;BYMONTHDAY=1,15"), ['Content-Type: text/calendar']);
@@ -178,15 +202,18 @@ check($hook['status'] === 403, 'webhook rejects a wrong clientState');
 $sub = array_values(mockState()['subscriptions'])[0];
 $hook = http('POST', "$nc/index.php/apps/graphcal/webhook/alice", json_encode(['value' => [['clientState' => $sub['clientState'], 'changeType' => 'updated']]]), ['Content-Type: application/json']);
 check($hook['status'] === 202, 'webhook accepts a valid notification', (string)$hook['status']);
-work();
+settle(fn () => !str_contains(implode('', objects('alice', $calendar)), 'Weekly sync'));
 $all = implode("\n", objects('alice', $calendar));
+if ($fpm) {
+	check(!str_contains(occ('background-job:list'), 'DeltaJob'), 'pulled right after the notification, nothing left for cron');
+}
 check(str_contains($all, 'Dentist (rescheduled)'), 'Outlook edit reached Nextcloud');
 check(!str_contains($all, 'Weekly sync'), 'series deleted in Outlook is removed from Nextcloud');
 check(!str_contains(occ('background-job:list'), 'PushJob'), 'no echo pushes after mirroring');
 
 echo "Delete in Nextcloud\n";
 dav('DELETE', 'alice', "$calendar/meeting-1.ics");
-work();
+pushed();
 check(count(mockRequests('DELETE', '#^/v1\.0/me/events/ev\d+$#')) === 1, 'delete sent to Exchange (which sends the cancellation)');
 
 echo "Disconnect\n";

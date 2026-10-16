@@ -1,20 +1,35 @@
 // SPDX-FileCopyrightText: 2026 GraphCal contributors
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// Browser smoke test of the settings pages and the sign-in popup, against the same setup as run.php.
-// Usage: NC_URL=http://127.0.0.1:8080 node tests/integration/browser.mjs
+// Browser test of the settings pages, the sign-in popup and the Calendar app, against the same setup
+// as run.php. Saves a screenshot of every step to SCREENSHOT_DIR (uploaded by CI as an artifact).
+// Usage: NC_DIR=/path/to/server NC_URL=http://127.0.0.1:8080 MOCK_URL=http://127.0.0.1:8090 node browser.mjs
+import { execFileSync } from 'node:child_process'
+import { mkdirSync } from 'node:fs'
 import { chromium } from 'playwright'
 
 const nc = process.env.NC_URL ?? 'http://127.0.0.1:8080'
+const mock = process.env.MOCK_URL ?? 'http://127.0.0.1:8090'
+const dir = process.env.SCREENSHOT_DIR ?? '/tmp/graphcal-screenshots'
+mkdirSync(dir, { recursive: true })
+
 const browser = await chromium.launch(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {})
 let failures = 0
+let shots = 0
 const check = (ok, what, detail = '') => {
 	console.log(`${ok ? '  ok  ' : '  FAIL'} ${what}${ok || !detail ? '' : '\n       ' + detail}`)
 	failures += ok ? 0 : 1
 }
+/** Full-page screenshot, or just one element when a locator is given. */
+async function shot(page, name, locator = null) {
+	const path = `${dir}/${String(++shots).padStart(2, '0')}-${name}.png`
+	await page.waitForLoadState('networkidle').catch(() => {})
+	await (locator ?? page).screenshot(locator ? { path } : { path, fullPage: true })
+	console.log(`       screenshot ${path}`)
+}
 
 async function login(user, password) {
-	const context = await browser.newContext()
+	const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, timezoneId: 'Europe/Amsterdam', locale: 'en-GB' })
 	const page = await context.newPage()
 	page.on('pageerror', (e) => check(false, `no JavaScript errors (${user})`, e.message))
 	await page.goto(`${nc}/index.php/login`)
@@ -24,29 +39,91 @@ async function login(user, password) {
 	return page
 }
 
-console.log('Admin settings')
+/** Create or change an event in the mocked Outlook mailbox. */
+async function outlook(event) {
+	await fetch(`${mock}/_event`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(event) })
+}
+const day = (offset, time) => `${new Date(Date.now() + offset * 86400000).toISOString().slice(0, 10)}T${time}.0000000`
+
+console.log('Admin settings (Entra ID app registration)')
 const admin = await login('admin', 'admin')
 await admin.goto(`${nc}/index.php/settings/admin/groupware`)
-await admin.locator('#graphcal-admin').waitFor()
+const section = admin.locator('#graphcal-admin')
+await section.waitFor()
 check((await admin.inputValue('#graphcal-admin input[readonly]')).endsWith('/apps/graphcal/oauth/callback'), 'redirect URI is shown')
-await admin.fill('#graphcal-admin-form input[name="tenant_id"]', 'tenant')
+await admin.fill('#graphcal-admin-form input[name="tenant_id"]', '72f988bf-86f1-41af-91ab-2d7cd011db47')
+await admin.fill('#graphcal-admin-form input[name="client_id"]', '3fa85f64-5717-4562-b3fc-2c963f66afa6')
 await admin.click('#graphcal-admin-form button[type="submit"]')
 await admin.locator('#graphcal-admin-msg', { hasText: 'Saved' }).waitFor({ timeout: 10000 })
 check(true, 'admin form saves')
+await shot(admin, 'admin-entra-app-registration', section)
+await shot(admin, 'admin-groupware-page')
 
 console.log('Personal settings and sign-in popup')
+await outlook({ id: 'demo-meeting', subject: 'Quarterly planning', isAllDay: false, isOrganizer: false,
+	start: { dateTime: day(1, '09:00:00'), timeZone: 'UTC' }, end: { dateTime: day(1, '10:30:00'), timeZone: 'UTC' },
+	originalStartTimeZone: 'W. Europe Standard Time', location: { displayName: 'Boardroom' },
+	organizer: { emailAddress: { address: 'boss@contoso.test', name: 'Bea Boss' } },
+	responseStatus: { response: 'notResponded' },
+	attendees: [
+		{ type: 'required', emailAddress: { address: 'alice@contoso.test', name: 'Alice' }, status: { response: 'none' } },
+		{ type: 'required', emailAddress: { address: 'carol@contoso.test', name: 'Carol' }, status: { response: 'accepted' } },
+	] })
+await outlook({ id: 'demo-allday', subject: 'Team offsite', isAllDay: true, showAs: 'oof',
+	start: { dateTime: day(2, '00:00:00'), timeZone: 'UTC' }, end: { dateTime: day(3, '00:00:00'), timeZone: 'UTC' } })
+await outlook({ id: 'demo-series', type: 'seriesMaster', subject: 'Weekly stand-up', isAllDay: false,
+	start: { dateTime: day(0, '07:30:00'), timeZone: 'UTC' }, end: { dateTime: day(0, '07:45:00'), timeZone: 'UTC' },
+	originalStartTimeZone: 'W. Europe Standard Time',
+	recurrence: { pattern: { type: 'daily', interval: 1 }, range: { type: 'numbered', numberOfOccurrences: 10, startDate: day(0, '00:00:00').slice(0, 10) } } })
+
 const bob = await login('bob', 'Secret-Pass-123')
 await bob.goto(`${nc}/index.php/settings/user/graphcal`)
 const connect = bob.getByRole('button', { name: 'Connect Microsoft 365' })
 await connect.waitFor()
 check(true, 'connect button shown to a new user')
+await shot(bob, 'personal-not-connected')
 const [popup] = await Promise.all([bob.waitForEvent('popup'), connect.click()])
 await popup.waitForEvent('close', { timeout: 20000 }).catch(() => check(false, 'popup closes itself after sign-in', popup.url()))
 await bob.getByText('Connected as').waitFor({ timeout: 20000 })
 check(true, 'settings page updates after the popup reports back')
 const calendar = bob.getByLabel('Calendar', { exact: true })
 check(await calendar.isChecked(), 'own Outlook calendar is synced by default')
-await bob.screenshot({ path: process.env.SCREENSHOT ?? '/tmp/graphcal-settings.png', fullPage: true })
+await shot(bob, 'personal-connected')
+
+const failed = await bob.context().newPage()
+await failed.goto(`${nc}/index.php/apps/graphcal/oauth/callback?code=x&state=expired`)
+await shot(failed, 'sign-in-error-page')
+await failed.close()
+
+console.log('Calendar app')
+if (process.env.NC_DIR) {
+	// What Nextcloud's cron does (php -S has no PHP-FPM to pull right after the sign-in response).
+	execFileSync('php', [`${process.env.NC_DIR}/occ`, 'background-job:worker', '--once', 'OCA\\GraphCal\\BackgroundJob\\DeltaJob'])
+}
+const app = await bob.goto(`${nc}/index.php/apps/calendar/timeGridWeek/now`)
+if (app?.ok()) {
+	const event = bob.locator('.fc-event', { hasText: 'Quarterly planning' }).first()
+	await event.waitFor({ timeout: 20000 }).catch(() => {})
+	check(await event.isVisible(), 'Outlook meeting shows in the Calendar app')
+	check(await bob.locator('.fc-event', { hasText: 'Weekly stand-up' }).first().isVisible(), 'Outlook series shows in the Calendar app')
+	await shot(bob, 'calendar-week')
+	if (await event.isVisible()) {
+		await event.click()
+		await bob.getByText('Bea Boss').first().waitFor({ timeout: 10000 }).catch(() => {})
+		check(await bob.getByText('Carol').first().isVisible(), 'attendees from Outlook are listed in the event')
+		await shot(bob, 'calendar-meeting-details')
+		await bob.keyboard.press('Escape')
+	}
+	await bob.goto(`${nc}/index.php/apps/calendar/dayGridMonth/now`)
+	await bob.locator('.fc-event').first().waitFor({ timeout: 20000 }).catch(() => {})
+	await shot(bob, 'calendar-month')
+} else {
+	console.log('       Calendar app not installed, skipped')
+}
+
+console.log('Turning a calendar off')
+await bob.goto(`${nc}/index.php/settings/user/graphcal`)
+await bob.getByText('Connected as').waitFor()
 // Nextcloud's .checkbox style hides the native input; users click the label.
 await Promise.all([
 	bob.waitForResponse((r) => r.url().includes('/settings/personal/calendar/')),
@@ -55,7 +132,8 @@ await Promise.all([
 await bob.reload()
 await bob.getByText('Connected as').waitFor()
 check(!(await bob.getByLabel('Calendar', { exact: true }).isChecked()), 'unticking a calendar stops syncing it')
+await shot(bob, 'personal-calendar-unticked')
 
 await browser.close()
-console.log(failures === 0 ? '\nAll browser checks passed' : `\n${failures} browser check(s) failed`)
+console.log(failures === 0 ? `\nAll browser checks passed (${shots} screenshots in ${dir})` : `\n${failures} browser check(s) failed`)
 process.exit(failures === 0 ? 0 : 1)

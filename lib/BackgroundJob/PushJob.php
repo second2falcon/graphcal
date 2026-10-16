@@ -12,8 +12,8 @@ use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\QueuedJob;
 
 /**
- * Sends one changed Nextcloud object to Graph. For a few seconds of latency run a dedicated worker:
- *   occ background-job:worker 'OCA\GraphCal\BackgroundJob\PushJob' 'OCA\GraphCal\BackgroundJob\DeltaJob'
+ * Sends one changed Nextcloud object to Graph. Normally done right after the request that changed it
+ * (SyncService::pushSoon); this queued job is the fallback that Nextcloud's cron runs.
  */
 class PushJob extends QueuedJob {
 	public function __construct(

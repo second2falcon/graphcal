@@ -13,7 +13,7 @@ These decisions build on [RESEARCH.md](RESEARCH.md). They were made on 2026-10-1
 | 3 | Scope | Sync **all of the user's own Outlook calendars**. The user can opt in to **calendars shared with them**. |
 | 4 | Source of truth | **Exchange.** Ideally the user sees only their Outlook calendars in the Nextcloud Calendar app. Nextcloud never sends invitations for synced calendars. |
 | 5 | Recurrence | The supported subset maps 1:1. Anything outside it is **rejected on write with a clear error**, not expanded into single events. See below. |
-| 6 | Propagation | **Push in both directions, aiming for seconds.** Graph change notifications go to Nextcloud, and a dedicated background-job worker pushes changes to Graph. Polling remains as a safety net. |
+| 6 | Propagation | **Push in both directions, aiming for seconds.** Graph change notifications go to Nextcloud, and changes are pushed to Graph right after the request that saved them (no separate worker). Nextcloud cron polling remains as a safety net. |
 | 7 | Login | A **popup** in the user's personal settings, using the same pattern as Nextcloud Mail. The admin grants tenant-wide consent once, so users only sign in (or pick their account). |
 
 ---
@@ -99,24 +99,27 @@ This is the goal: anything a user creates in either client appears in the other 
 
 ### Nextcloud → Outlook (target: a few seconds)
 
+> Changed in 0.1.0 at the user's request: no separate worker or systemd service. Everything runs inside Nextcloud, so the app works purely from the App Store.
+
 ```
 CalDAV PUT ─► CalendarObject*Event (inside the DB transaction)
            └► IJobList::add(PushJob, {calendarId, uri, op})      // committed with the write
-occ background-job:worker 'OCA\GraphCal\BackgroundJob\PushJob'   // polls every 1 s (default --interval=1)
+           └► after the response (shutdown + fastcgi_finish_request): take the job back and push now
            └► Graph POST/PATCH/DELETE/accept … (~0.5–1 s)
 Exchange ─► Outlook Classic (cached mode gets Exchange push, usually seconds)
 ```
 
-- Nextcloud has had `occ background-job:worker [job-classes…] [--interval=1] [--stop_after=…]` since 27. It was confirmed in `core/Command/Background/JobWorker.php` on stable33.
-- **The admin runs one worker as a systemd service.** The admin docs will include a ready-made unit file. Without the worker, jobs run with normal cron, every 5 minutes.
-- Pushes **for one user run one at a time** (one job per user at a time), because Graph allows at most 4 concurrent requests per mailbox.
+- With PHP-FPM (or LiteSpeed) the response is released first, so the user doesn't wait. With Apache `mod_php` the request ends about a second later.
+- If the push fails, the job stays queued and Nextcloud's cron retries it.
+- Graph allows at most 4 concurrent requests per mailbox; pushes for one change are sequential.
 
 ### Outlook → Nextcloud (target: seconds to tens of seconds)
 
 ```
-Exchange change ─► Graph change notification ─► POST https://<nc>/apps/graphcal/webhook  (public route)
-                                                └► check clientState, reply 202 within 3 s, IJobList::add(DeltaJob, {user})
-worker ─► calendarView/delta per calendar ─► CalDavBackend write (guard flag) ─► CalDAV clients pick it up
+Exchange change ─► Graph change notification ─► POST https://<nc>/apps/graphcal/webhook/<user>  (public route)
+                                                └► check clientState, queue DeltaJob, reply 202
+after the response (PHP-FPM) or next cron run ─► calendarView/delta per calendar (per-user lock)
+                                                └► CalDavBackend write (guard flag) ─► CalDAV clients pick it up
 ```
 
 - **One subscription per user** on `/me/events`, which covers all calendars in the user's mailbox.
@@ -135,7 +138,7 @@ worker ─► calendarView/delta per calendar ─► CalDavBackend write (guard 
 ### Requirements for the server
 
 - **Public HTTPS** with a valid certificate. Graph checks the URL synchronously when the subscription is created.
-- **`occ background-job:worker` running for GraphCal's job classes.**
+- **Background jobs set to Cron**, for the 5-minute safety net and retries. No separate worker.
 - **Outbound HTTPS** to `login.microsoftonline.com` and `graph.microsoft.com`.
 
 ## 6. Mapping and echo protection

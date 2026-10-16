@@ -8,11 +8,9 @@ declare(strict_types=1);
 namespace OCA\GraphCal\Listener;
 
 use OCA\DAV\Events\SabrePluginAuthInitEvent;
-use OCA\GraphCal\BackgroundJob\PushJob;
 use OCA\GraphCal\Dav\SchedulingGuard;
 use OCA\GraphCal\Db\Store;
 use OCA\GraphCal\Service\SyncService;
-use OCP\BackgroundJob\IJobList;
 use OCP\Calendar\Events\AbstractCalendarObjectEvent;
 use OCP\Calendar\Events\CalendarObjectMovedEvent;
 use OCP\EventDispatcher\Event;
@@ -21,15 +19,14 @@ use OCP\User\Events\UserDeletedEvent;
 
 /**
  * - Sabre server init: add the scheduling guard (all three DAV servers dispatch this event).
- * - Calendar object changes in synced calendars: queue a push. Runs inside the DB transaction,
- *   so only queue (atomic with the write); never call Graph here.
+ * - Calendar object changes in synced calendars: queue a push (atomic with the write, we're inside
+ *   the DB transaction) and run it right after the response; never call Graph here.
  * - User deleted: drop sync state.
  * @template-implements IEventListener<Event>
  */
 class Listener implements IEventListener {
 	public function __construct(
 		private Store $store,
-		private IJobList $jobList,
 		private SyncService $sync,
 	) {
 	}
@@ -52,9 +49,6 @@ class Listener implements IEventListener {
 		if (SyncService::$writing || $this->store->calendarByNcId($calendarId) === null) {
 			return;
 		}
-		$args = ['calendar' => $calendarId, 'uri' => $uri];
-		if (!$this->jobList->has(PushJob::class, $args)) {
-			$this->jobList->add(PushJob::class, $args);
-		}
+		$this->sync->pushSoon($calendarId, $uri);
 	}
 }

@@ -54,7 +54,7 @@ class WebhookController extends Controller {
 		if (!$accepted) {
 			return new Response(Http::STATUS_FORBIDDEN);
 		}
-		$this->sync->queuePull($user);
+		$this->sync->pullSoon($user);
 		return new Response(Http::STATUS_ACCEPTED);
 	}
 }
