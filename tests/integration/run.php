@@ -13,7 +13,7 @@ declare(strict_types=1);
 
 if (PHP_SAPI !== 'cli') {
 	http_response_code(404);
-	exit;
+	exit("run.php is a command-line test runner: php tests/integration/run.php\n");
 }
 
 $nc = rtrim(getenv('NC_URL') ?: 'http://127.0.0.1:8080', '/');

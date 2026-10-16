@@ -15,7 +15,8 @@ declare(strict_types=1);
 // Only ever run by PHP's built-in test server, never by a real web server serving the apps folder.
 if (PHP_SAPI !== 'cli-server') {
 	http_response_code(404);
-	exit;
+	header('Content-Type: text/plain');
+	exit("graph-mock.php is a test helper and only runs under PHP's built-in server: see tests/integration/setup.sh\n");
 }
 
 $file = getenv('MOCK_STATE') ?: sys_get_temp_dir() . '/graphcal-mock.json';

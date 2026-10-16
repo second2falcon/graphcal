@@ -18,44 +18,59 @@ Design and research: [docs/DESIGN.md](docs/DESIGN.md), [docs/RESEARCH.md](docs/R
 
 ## Installation
 
-GraphCal is not on the Nextcloud App Store yet. Install it manually from its release archive.
+GraphCal is not on the Nextcloud App Store yet. Install it manually from its release archive, `graphcal-<version>.tar.gz`. It contains a single folder named `graphcal` with only the app; there is no build step and nothing else to install.
 
-### What you need
+### Get the archive
 
-`graphcal-<version>.tar.gz` contains a single folder named `graphcal` with only the app; there is no build step and nothing else to install. Get it from:
+- **A released version:** download `graphcal-<version>.tar.gz` from [Releases](https://github.com/second2falcon/graphcal/releases).
+- **An unreleased build, for testing:** open a successful run of the [CI workflow](https://github.com/second2falcon/graphcal/actions/workflows/ci.yml) and download the `graphcal-app-archive` artifact. You need to be signed in to GitHub. It arrives as a `.zip` around the archive; unpack it with `unzip graphcal-app-archive.zip`, which gives you `graphcal-<version>.tar.gz`.
 
-- **[Releases](https://github.com/second2falcon/graphcal/releases)**, once a version has been released; or
-- **for testing an unreleased build:** any successful run of the [CI workflow](https://github.com/second2falcon/graphcal/actions/workflows/ci.yml). Open the run, download the `graphcal-app-archive` artifact (a `.zip` that contains the `.tar.gz`) and unzip it.
-
-Don't use GitHub's *Code → Download ZIP* or a `git clone`. The folder would have the wrong name (it must be exactly `graphcal`), and it would include the developer test tools.
+Copy the archive to your server, for example with `scp`. Don't use GitHub's *Code → Download ZIP* or a `git clone` instead: the folder would have the wrong name (it must be exactly `graphcal`), and it would include the developer test tools.
 
 ### Standard Nextcloud install
 
-Extract the archive into an apps folder that Nextcloud can write to, and enable the app. Run the commands as the web server user (`www-data` on Debian/Ubuntu; `apache` or `nginx` on some other systems). Adjust `/var/www/nextcloud` to your installation, and put the archive somewhere the web server user can read, such as `/tmp`.
+Set the two paths at the top, then run the commands on the server. They replace any older `graphcal` folder, hand the files to the web server user (`www-data` on Debian/Ubuntu; `apache` or `nginx` on some other systems) and enable the app.
 
 ```sh
-sudo -u www-data rm -rf /var/www/nextcloud/apps/graphcal     # removes an older version, if any
-sudo -u www-data tar -xzf /tmp/graphcal-0.1.0.tar.gz -C /var/www/nextcloud/apps
-sudo -u www-data php /var/www/nextcloud/occ app:enable graphcal
+ARCHIVE=~/graphcal-0.1.0.tar.gz   # the archive you downloaded
+NC=/var/www/nextcloud             # your Nextcloud folder
+sudo rm -rf "$NC/apps/graphcal"
+sudo tar -xzf "$ARCHIVE" -C "$NC/apps"
+sudo chown -R www-data:www-data "$NC/apps/graphcal"
+sudo -u www-data php "$NC/occ" app:enable graphcal
 ```
 
 If your `config.php` defines `apps_paths`, use the folder marked `'writable' => true` instead of `apps`, often `custom_apps`.
 
 ### Nextcloud All-in-One (Docker)
 
-AIO keeps additional apps in `custom_apps` inside the `nextcloud-aio-nextcloud` container:
+AIO keeps additional apps in `custom_apps` inside the `nextcloud-aio-nextcloud` container. Run on the Docker host:
 
 ```sh
-sudo docker cp graphcal-0.1.0.tar.gz nextcloud-aio-nextcloud:/tmp/graphcal.tar.gz
+ARCHIVE=~/graphcal-0.1.0.tar.gz   # the archive you downloaded
+sudo docker cp "$ARCHIVE" nextcloud-aio-nextcloud:/tmp/graphcal.tar.gz
 sudo docker exec nextcloud-aio-nextcloud sh -c 'mkdir -p /var/www/html/custom_apps && cd /var/www/html/custom_apps && rm -rf graphcal && tar -xzf /tmp/graphcal.tar.gz && chown -R www-data:www-data graphcal && rm /tmp/graphcal.tar.gz'
 sudo docker exec --user www-data nextcloud-aio-nextcloud php occ app:enable graphcal
 ```
 
-`rm -rf graphcal` removes an older version, if any. The AIO test in CI installs GraphCal with exactly these commands.
+The AIO test in CI installs GraphCal with exactly these commands. AIO already runs Nextcloud's cron every 5 minutes, so there is nothing else to set up. Two things to know:
+
+- **GraphCal survives AIO container updates:** `custom_apps` lives on AIO's persistent volume.
+- **Major Nextcloud updates can switch it off.** During a major update, AIO disables every app in `custom_apps` and re-enables them afterwards. If the new Nextcloud version is newer than the highest one GraphCal supports (`max-version` in `appinfo/info.xml`, currently 35), GraphCal stays disabled and AIO sends you a notification. Install a GraphCal release that supports the new version; your settings and sync state are kept in the meantime.
 
 ### Updating
 
-Run the same commands with the new archive; they replace the old `graphcal` folder, so no stale files remain. Then run `occ upgrade`: `sudo -u www-data php /var/www/nextcloud/occ upgrade`, or on AIO `sudo docker exec --user www-data nextcloud-aio-nextcloud php occ upgrade`. Settings, tokens and sync state are kept, because they live in the database.
+Run the same installation commands with the new archive. They replace the old `graphcal` folder, so no stale files remain. Then run `occ upgrade`: `sudo -u www-data php "$NC/occ" upgrade`, or on AIO `sudo docker exec --user www-data nextcloud-aio-nextcloud php occ upgrade`. Settings, tokens and sync state are kept, because they live in the database.
+
+### Hosted Nextcloud without shell access
+
+Without shell or file access, Nextcloud can only install apps from the App Store, through the Apps page; it has no way to upload an app archive. GraphCal has to be published on the App Store first. Check with your provider whether they allow App Store apps that aren't preinstalled, since some managed hosts offer only a curated selection.
+
+The instance also needs:
+
+- cron for background jobs, which most providers run for you;
+- outbound HTTPS to `login.microsoftonline.com` and `graph.microsoft.com`;
+- ideally PHP-FPM. With it, Outlook changes arrive within seconds; without it, after up to 5 minutes.
 
 ## Setup
 

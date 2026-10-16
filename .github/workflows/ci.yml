@@ -38,26 +38,16 @@ jobs:
       - name: Psalm
         if: matrix.php == '8.2'
         run: composer run psalm
-      - name: Build the installable archive
+      - name: Build and check the installable archive
         if: matrix.php == '8.2'
-        run: |
-          archive=$(scripts/package.sh)
-          tar -tzf "$archive" > contents.txt
-          fail() { echo "::error::$1"; exit 1; }
-          ! grep -vq '^graphcal/' contents.txt || fail "everything must be inside the graphcal/ folder"
-          top=$(sed -n 's,^graphcal/\([^/][^/]*\).*,\1,p' contents.txt | LC_ALL=C sort -u | xargs)
-          [ "$top" = "CHANGELOG.md LICENSES README.md appinfo img js lib templates" ] || fail "unexpected top-level entries: $top"
-          for f in appinfo/info.xml lib/AppInfo/Application.php lib/Migration lib/Service/SyncService.php \
-                   js/admin.js js/personal.js js/oauth-done.js js/calendar-errors.js templates/admin.php LICENSES/AGPL-3.0-or-later.txt; do
-            grep -q "^graphcal/$f" contents.txt || fail "missing from the archive: $f"
-          done
-          echo "ARCHIVE=$archive" >> $GITHUB_ENV
+        run: scripts/package.sh
       - name: Upload the archive (for manual installation and testing)
         if: matrix.php == '8.2'
         uses: actions/upload-artifact@v4
         with:
           name: graphcal-app-archive
-          path: ${{ env.ARCHIVE }}
+          path: build/graphcal-*.tar.gz
+          if-no-files-found: error
 
   info-xml:
     name: Validate appinfo/info.xml
