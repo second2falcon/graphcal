@@ -18,11 +18,32 @@
 		}
 		lastShown = text
 		setTimeout(() => { lastShown = '' }, 3000)
-		if (window.OCP?.Toast?.error) {
-			window.OCP.Toast.error(text, { timeout: 20000 })
-		} else {
-			window.alert(text)
-		}
+		show(text)
+	}
+
+	// Own notice instead of OCP.Toast: that API is deprecated and on Nextcloud 35 only renders the screen-reader text.
+	function show(text) {
+		document.querySelector('.graphcal-toast')?.remove()
+		const box = document.createElement('div')
+		box.className = 'graphcal-toast'
+		box.setAttribute('role', 'alert')
+		box.textContent = text
+		Object.assign(box.style, {
+			position: 'fixed', top: '120px', right: '12px', zIndex: '100000', maxWidth: '420px',
+			padding: '12px 40px 12px 14px', lineHeight: '1.4',
+			background: 'var(--color-main-background, #fff)', color: 'var(--color-main-text, #222)',
+			borderLeft: '4px solid var(--color-error, #d91812)', borderRadius: 'var(--border-radius-large, 10px)',
+			boxShadow: '0 0 6px 0 var(--color-box-shadow, rgba(0, 0, 0, .25))',
+		})
+		const close = document.createElement('button')
+		close.type = 'button'
+		close.textContent = '✕'
+		close.setAttribute('aria-label', 'Close')
+		Object.assign(close.style, { position: 'absolute', top: '6px', right: '6px', minHeight: 'auto', padding: '4px 8px', border: 'none', background: 'none', cursor: 'pointer' })
+		close.addEventListener('click', () => box.remove())
+		box.append(close)
+		document.body.append(box)
+		setTimeout(() => box.remove(), 20000)
 	}
 
 	const send = XMLHttpRequest.prototype.send
@@ -35,12 +56,21 @@
 		return send.apply(this, args)
 	}
 
-	const fetch = window.fetch
-	window.fetch = async (...args) => {
-		const response = await fetch(...args)
-		if (response.status === 403) {
-			response.clone().text().then(explain, () => {})
+	// Wrap fetch once the page has loaded: Nextcloud core installs its own fetch wrapper while loading,
+	// and the Calendar app calls whatever window.fetch is at request time.
+	function wrapFetch() {
+		const fetch = window.fetch
+		window.fetch = async (...args) => {
+			const response = await fetch(...args)
+			if (response.status === 403) {
+				response.clone().text().then(explain, () => {})
+			}
+			return response
 		}
-		return response
+	}
+	if (document.readyState === 'complete') {
+		wrapFetch()
+	} else {
+		window.addEventListener('load', wrapFetch, { once: true })
 	}
 })()

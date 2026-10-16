@@ -141,7 +141,7 @@ if (app?.ok()) {
 	const refused = bob.locator('.toastify', { hasText: 'Failed to save event' })
 	await refused.waitFor({ timeout: 10000 }).catch(() => {})
 	check(await refused.isVisible(), 'saving "monthly on two days" in the Outlook calendar is refused')
-	const reason = bob.locator('.toastify', { hasText: "Microsoft 365 doesn't support this repeat pattern: several days, or the last day, of a month." })
+	const reason = bob.getByRole('alert').filter({ hasText: "Microsoft 365 doesn't support this repeat pattern: several days, or the last day, of a month." })
 	await reason.waitFor({ timeout: 10000 }).catch(() => {})
 	check(await reason.isVisible(), 'the user is told why the repeat pattern was refused')
 	await shot(bob, 'calendar-unsupported-repeat-refused')
