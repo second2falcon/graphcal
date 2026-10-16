@@ -1,7 +1,7 @@
 version = 1
 SPDX-PackageName = "graphcal"
 SPDX-PackageSupplier = "GraphCal contributors"
-SPDX-PackageDownloadLocation = "https://github.com/second2falcon/nextcloud-exchange-calendar-sync"
+SPDX-PackageDownloadLocation = "https://github.com/second2falcon/graphcal"
 
 [[annotations]]
 path = ["README.md", "CHANGELOG.md", "docs/**", ".gitignore", "composer.json", "composer.lock", "img/**", "tests/integration/package.json"]

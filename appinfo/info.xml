@@ -23,9 +23,9 @@ Microsoft, Microsoft 365, Outlook and Exchange are trademarks of the Microsoft g
 	<namespace>GraphCal</namespace>
 	<category>integration</category>
 	<category>organization</category>
-	<website>https://github.com/second2falcon/nextcloud-exchange-calendar-sync</website>
-	<bugs>https://github.com/second2falcon/nextcloud-exchange-calendar-sync/issues</bugs>
-	<repository type="git">https://github.com/second2falcon/nextcloud-exchange-calendar-sync.git</repository>
+	<website>https://github.com/second2falcon/graphcal</website>
+	<bugs>https://github.com/second2falcon/graphcal/issues</bugs>
+	<repository type="git">https://github.com/second2falcon/graphcal.git</repository>
 	<dependencies>
 		<php min-version="8.2" max-version="8.5"/>
 		<nextcloud min-version="33" max-version="35"/>
