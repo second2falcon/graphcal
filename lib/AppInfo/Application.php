@@ -8,11 +8,13 @@ declare(strict_types=1);
 namespace OCA\GraphCal\AppInfo;
 
 use OCA\DAV\Events\SabrePluginAuthInitEvent;
+use OCA\GraphCal\Listener\CalendarPageListener;
 use OCA\GraphCal\Listener\Listener;
 use OCP\AppFramework\App;
 use OCP\AppFramework\Bootstrap\IBootContext;
 use OCP\AppFramework\Bootstrap\IBootstrap;
 use OCP\AppFramework\Bootstrap\IRegistrationContext;
+use OCP\AppFramework\Http\Events\BeforeTemplateRenderedEvent;
 use OCP\Calendar\Events\CalendarObjectCreatedEvent;
 use OCP\Calendar\Events\CalendarObjectDeletedEvent;
 use OCP\Calendar\Events\CalendarObjectMovedEvent;
@@ -42,6 +44,8 @@ class Application extends App implements IBootstrap {
 			/** @psalm-suppress InvalidArgument one listener class handles all of them */
 			$context->registerEventListener($event, Listener::class);
 		}
+		// Separate, dependency-free listener: it runs on every page render.
+		$context->registerEventListener(BeforeTemplateRenderedEvent::class, CalendarPageListener::class);
 	}
 
 	public function boot(IBootContext $context): void {
