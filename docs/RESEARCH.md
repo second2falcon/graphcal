@@ -414,6 +414,8 @@ There is no manual review per release; validation is automated. The rules:
 
 ## 7. Open decisions
 
+> **Resolved on 2026-10-16. See [DESIGN.md](DESIGN.md)** (NC 33+, name GraphCal, all Outlook calendars plus opt-in shared calendars, Exchange as the only invitation sender, reject unsupported recurrence rules, push in both directions).
+
 1. Do we support NC 32 even though it is already EOL? Or `min-version` 33 / PHP 8.2?
 2. App id and display name (suggestion `calbridge` / "CalBridge"), and whether to rename the repo.
 3. A new dedicated Nextcloud calendar per Exchange calendar ("Outlook"), or link an existing calendar? A new one is simpler and safer.
