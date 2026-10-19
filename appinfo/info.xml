@@ -17,7 +17,7 @@ Meeting invitations, updates, cancellations and replies for synced calendars are
 Requires an Entra ID app registration created by the administrator (see the README).
 
 Microsoft, Microsoft 365, Outlook and Exchange are trademarks of the Microsoft group of companies. This app is not affiliated with Microsoft.]]></description>
-	<version>0.1.0</version>
+	<version>0.1.1</version>
 	<licence>AGPL-3.0-or-later</licence>
 	<author>GraphCal contributors</author>
 	<namespace>GraphCal</namespace>

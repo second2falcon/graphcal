@@ -153,6 +153,10 @@ check(($token['grant_type'] ?? '') === 'authorization_code' && ($token['code_ver
 check(count(mockState()['subscriptions']) === 1, 'change-notification subscription created (webhook validation echoed)');
 
 $calendar = 'graphcal-' . substr(md5('cal1'), 0, 12);
+$csrf = json_decode(http('GET', "$nc/index.php/csrftoken", null, [], 'alice:' . PASS, $jar)['body'], true)['token'] ?? '';
+$cals = array_column(json_decode(http('GET', "$nc/index.php/apps/graphcal/settings/personal", null, ["requesttoken: $csrf"], 'alice:' . PASS, $jar)['body'], true)['calendars'] ?? [], null, 'name');
+check(($cals['Calendar']['enabled'] ?? false) && !($cals['Calendar']['shared'] ?? true), 'own calendar is synced by default', json_encode($cals));
+check(isset($cals['Boss']) && $cals['Boss']['shared'] && !$cals['Boss']['enabled'], 'calendar shared with the user is listed but opt-in', json_encode($cals));
 
 echo "Outlook -> Nextcloud\n";
 settle(fn () => count(objects('alice', $calendar)) >= 3);

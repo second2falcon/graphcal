@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## 0.1.1
+
+- Fix signing in to Microsoft 365, which failed with "Could not find a property named 'isSharedWithMe'". Graph v1.0 refuses that property, so calendars shared with you are now recognized by their owner.
+
 ## 0.1.0
 
 First version, for Nextcloud 33–35.

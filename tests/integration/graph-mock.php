@@ -25,7 +25,10 @@ $me = 'alice@contoso.test';
 $lock = fopen($file . '.lock', 'c');
 flock($lock, LOCK_EX);
 $state = is_file($file) ? json_decode(file_get_contents($file), true) : null;
-$state ??= ['seq' => 0, 'calendars' => [['id' => 'cal1', 'name' => 'Calendar', 'hexColor' => '#0078d4', 'canEdit' => true, 'isSharedWithMe' => false]], 'events' => [], 'removed' => [], 'requests' => [], 'subscriptions' => []];
+$state ??= ['seq' => 0, 'calendars' => [
+	['id' => 'cal1', 'name' => 'Calendar', 'hexColor' => '#0078d4', 'canEdit' => true, 'canShare' => true, 'owner' => ['name' => 'Alice', 'address' => 'Alice@contoso.test']],
+	['id' => 'cal2', 'name' => 'Boss', 'hexColor' => '#e81123', 'canEdit' => false, 'canShare' => false, 'owner' => ['name' => 'Boss', 'address' => 'boss@contoso.test']],
+], 'events' => [], 'removed' => [], 'requests' => [], 'subscriptions' => []];
 
 $method = $_SERVER['REQUEST_METHOD'];
 $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
@@ -58,6 +61,22 @@ $touch = function (array $e) use (&$state) {
 	$state['events'][$e['id']] = $e;
 	return $e;
 };
+
+// Like Graph, refuse a $select naming a property the resource doesn't have. The lists are what the real
+// v1.0 service accepts, which is not always what the docs say (isSharedWithMe is documented but refused).
+$selectable = [
+	'calendar' => 'allowedOnlineMeetingProviders,canEdit,canShare,canViewPrivateItems,changeKey,color,defaultOnlineMeetingProvider,hexColor,id,isDefaultCalendar,isRemovable,isTallyingResponses,name,owner',
+	'event' => 'allowNewTimeProposals,attendees,body,bodyPreview,cancelledOccurrences,categories,changeKey,createdDateTime,end,hasAttachments,hideAttendees,iCalUId,id,importance,isAllDay,isCancelled,isDraft,isOnlineMeeting,isOrganizer,isReminderOn,lastModifiedDateTime,location,locations,onlineMeeting,onlineMeetingProvider,onlineMeetingUrl,organizer,originalEndTimeZone,originalStart,originalStartTimeZone,recurrence,reminderMinutesBeforeStart,responseRequested,responseStatus,sensitivity,seriesMasterId,showAs,start,subject,transactionId,type,webLink,exceptionOccurrences',
+	'user' => 'displayName,givenName,id,mail,surname,userPrincipalName',
+];
+if (isset($query['$select']) && str_starts_with($path, '/v1.0/')) {
+	$type = preg_match('#/calendars?$#', $path) ? 'calendar' : (preg_match('#^/v1\.0/(me|users/[^/]+)$#', $path) ? 'user' : 'event');
+	foreach (explode(',', $query['$select']) as $prop) {
+		if (!in_array($prop, explode(',', $selectable[$type]), true)) {
+			$out(400, ['error' => ['code' => 'BadRequest', 'message' => "Parsing OData Select and Expand failed: Could not find a property named '$prop' on type 'microsoft.graph.$type'."]]);
+		}
+	}
+}
 
 switch (true) {
 	case $path === '/_state' && $method === 'GET':

@@ -40,7 +40,7 @@ If the user is already signed in to Microsoft in the browser, or Nextcloud itsel
 
 - On connect, `GET /me/calendars` lists the calendars.
   - Calendars the user owns are **on by default**.
-  - Calendars with `isSharedWithMe=true` are listed **off**, and the user can switch them on in personal settings.
+  - Calendars shared with the user (`canShare=false` and an `owner` other than the user; Graph v1.0 refuses `$select=isSharedWithMe`) are listed **off**, and the user can switch them on in personal settings.
 - An **"Add someone's calendar" (email address)** field opens `/users/{email}/calendar`. This needs `Calendars.ReadWrite.Shared` and works only if the owner has shared or delegated the calendar.
 - Each enabled Outlook calendar becomes a Nextcloud calendar with the same name and colour. It is owned by the app's mapping, created through the internal `CalDavBackend`.
 - The Outlook default calendar (`isDefaultCalendar`) becomes the Nextcloud **`schedule-default-calendar`**.
@@ -163,6 +163,6 @@ The app keeps one table, `graphcal_map`:
 
 1. That the `Schedule-Reply`/`x-nc-scheduling` suppression stops all iMIP mail, on create, update and delete.
 2. That attendee replies show up in the organizer's `calendarView/delta` and trigger a `/me/events` notification.
-3. Whether changes in an `isSharedWithMe` calendar copy (in the user's own mailbox) trigger the `/me/events` subscription. If they do, shared calendars get push without the application permission.
+3. Whether changes in a shared calendar copy (in the user's own mailbox) trigger the `/me/events` subscription. If they do, shared calendars get push without the application permission.
 4. Typical latency of Graph notifications in practice.
 5. Creating a Nextcloud calendar per Outlook calendar through `CalDavBackend`, and marking it read-only in the Calendar UI where `canEdit=false`.

@@ -61,8 +61,13 @@ class SyncService {
 
 	/** Read the user's Outlook calendars; own calendars are enabled on first sight, shared ones are opt-in. */
 	public function refreshCalendars(string $userId): void {
-		foreach ($this->ms->graphAll($userId, '/me/calendars?$select=id,name,hexColor,canEdit,isSharedWithMe,owner&$top=100') as $c) {
-			$row = $this->store->upsertCalendar($userId, (string)$c['id'], '', (string)$c['name'], (bool)($c['isSharedWithMe'] ?? false), (bool)($c['canEdit'] ?? true), !($c['isSharedWithMe'] ?? false));
+		// Graph v1.0 rejects isSharedWithMe in $select (documented, but beta-only in practice), so tell shared
+		// calendars apart by owner: only the owner can share a calendar, and owner is whoever shared it with us.
+		$me = $this->ms->msEmail($userId);
+		foreach ($this->ms->graphAll($userId, '/me/calendars?$select=id,name,hexColor,canEdit,canShare,owner&$top=100') as $c) {
+			$owner = strtolower((string)($c['owner']['address'] ?? ''));
+			$shared = !($c['canShare'] ?? true) && $owner !== '' && $owner !== $me;
+			$row = $this->store->upsertCalendar($userId, (string)$c['id'], '', (string)$c['name'], $shared, (bool)($c['canEdit'] ?? true), !$shared);
 			if ($row['enabled'] && !$row['nc_calendar_id']) {
 				$this->enable($userId, (int)$row['id'], (string)($c['hexColor'] ?? ''));
 			}
