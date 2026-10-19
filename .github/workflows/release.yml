@@ -3,6 +3,8 @@
 #
 # Push a tag like v0.1.0 (matching <version> in appinfo/info.xml) to publish a GitHub release
 # with graphcal-<version>.tar.gz, the archive for manual installation (see README).
+# Once the "appstore" environment has the APP_PRIVATE_KEY and APPSTORE_TOKEN secrets, the archive
+# is also code-signed and published to the Nextcloud App Store (README: Releasing).
 # The full CI suite runs on the tagged commit first; nothing is published unless it passes.
 name: Release
 
@@ -20,8 +22,11 @@ jobs:
   release:
     needs: ci
     runs-on: ubuntu-latest
+    environment: appstore
     permissions:
       contents: write
+    env:
+      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
     steps:
       - uses: actions/checkout@v5
       - name: Check that the tag matches appinfo/info.xml
@@ -41,6 +46,25 @@ jobs:
           if ! grep -q '[^[:space:]]' notes.md; then
             echo "::error::CHANGELOG.md has no (or an empty) section for $VERSION; add '## $VERSION' with the changes"; exit 1
           fi
+      - name: Checkout Nextcloud server (its occ signs the app)
+        if: env.APP_PRIVATE_KEY != ''
+        uses: actions/checkout@v5
+        with:
+          repository: nextcloud/server
+          ref: stable35
+          submodules: true
+          path: build/nextcloud
+      - name: Get the signing key and the app certificate
+        if: env.APP_PRIVATE_KEY != ''
+        run: |
+          key="$RUNNER_TEMP/graphcal.key" crt="$RUNNER_TEMP/graphcal.crt"
+          printf '%s\n' "$APP_PRIVATE_KEY" > "$key"
+          curl -sSfL -o "$crt" https://raw.githubusercontent.com/nextcloud/app-certificate-requests/HEAD/graphcal/graphcal.crt \
+            || { echo "::error::No certificate at nextcloud/app-certificate-requests/graphcal/graphcal.crt yet"; exit 1; }
+          if [ "$(openssl x509 -noout -pubkey -in "$crt")" != "$(openssl pkey -pubout -in "$key")" ]; then
+            echo "::error::APP_PRIVATE_KEY does not belong to the graphcal certificate"; exit 1
+          fi
+          { echo "SIGN_KEY=$key"; echo "SIGN_CERT=$crt"; echo "OCC=$PWD/build/nextcloud/occ"; } >> $GITHUB_ENV
       - name: Build and check the archive
         run: scripts/package.sh
       - name: Publish the release
@@ -57,3 +81,19 @@ jobs:
           else
             gh release create "$GITHUB_REF_NAME" "$archive" "${args[@]}"
           fi
+      - name: Publish to the Nextcloud App Store
+        if: env.APP_PRIVATE_KEY != ''
+        env:
+          APPSTORE_TOKEN: ${{ secrets.APPSTORE_TOKEN }}
+        run: |
+          if [ -z "$APPSTORE_TOKEN" ]; then echo "::error::Add the APPSTORE_TOKEN secret to the appstore environment"; exit 1; fi
+          archive="build/graphcal-$VERSION.tar.gz"
+          jq -n --arg download "https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME/graphcal-$VERSION.tar.gz" \
+            --arg signature "$(openssl dgst -sha512 -sign "$SIGN_KEY" "$archive" | openssl base64 -A)" \
+            '{download: $download, signature: $signature, nightly: false}' > appstore-release.json
+          status=$(curl -sS -o appstore-response.txt -w '%{http_code}' -X POST https://apps.nextcloud.com/api/v1/apps/releases \
+            -H "Authorization: Token $APPSTORE_TOKEN" -H 'Content-Type: application/json' --data @appstore-release.json)
+          cat appstore-response.txt; echo
+          # 201: new release; 200: the same version again (re-run), updated.
+          if [ "$status" != 201 ] && [ "$status" != 200 ]; then echo "::error::The App Store answered HTTP $status"; exit 1; fi
+          echo "Published GraphCal $VERSION to the App Store: https://apps.nextcloud.com/apps/graphcal" >> $GITHUB_STEP_SUMMARY

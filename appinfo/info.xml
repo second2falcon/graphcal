@@ -26,6 +26,11 @@ Microsoft, Microsoft 365, Outlook and Exchange are trademarks of the Microsoft g
 	<website>https://github.com/second2falcon/graphcal</website>
 	<bugs>https://github.com/second2falcon/graphcal/issues</bugs>
 	<repository type="git">https://github.com/second2falcon/graphcal.git</repository>
+	<screenshot>https://raw.githubusercontent.com/second2falcon/graphcal/main/screenshots/1-personal-settings.png</screenshot>
+	<screenshot>https://raw.githubusercontent.com/second2falcon/graphcal/main/screenshots/2-calendar.png</screenshot>
+	<screenshot>https://raw.githubusercontent.com/second2falcon/graphcal/main/screenshots/3-meeting.png</screenshot>
+	<screenshot>https://raw.githubusercontent.com/second2falcon/graphcal/main/screenshots/4-unsupported-repeat.png</screenshot>
+	<screenshot>https://raw.githubusercontent.com/second2falcon/graphcal/main/screenshots/5-admin-settings.png</screenshot>
 	<dependencies>
 		<php min-version="8.2" max-version="8.5"/>
 		<nextcloud min-version="33" max-version="35"/>

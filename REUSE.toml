@@ -4,7 +4,7 @@ SPDX-PackageSupplier = "GraphCal contributors"
 SPDX-PackageDownloadLocation = "https://github.com/second2falcon/graphcal"
 
 [[annotations]]
-path = ["README.md", "CHANGELOG.md", "docs/**", ".gitignore", "composer.json", "composer.lock", "img/**", "tests/integration/package.json"]
+path = ["README.md", "CHANGELOG.md", "docs/**", ".gitignore", "composer.json", "composer.lock", "img/**", "tests/integration/package.json", "SECURITY.md", "screenshots/**"]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2026 GraphCal contributors"
 SPDX-License-Identifier = "AGPL-3.0-or-later"

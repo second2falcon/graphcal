@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Releases can be code-signed and published to the Nextcloud App Store from the release workflow.
+- `SECURITY.md` and App Store screenshots.
+
 ## 0.1.1
 
 - Fix signing in to Microsoft 365, which failed with "Could not find a property named 'isSharedWithMe'". Graph v1.0 refuses that property, so calendars shared with you are now recognized by their owner.

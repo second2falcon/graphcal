@@ -129,7 +129,22 @@ composer run lint && composer run test:unit && composer run psalm
 scripts/package.sh   # builds build/graphcal-<version>.tar.gz
 ```
 
-To publish a release, set `<version>` in `appinfo/info.xml`, add a `## <version>` section to `CHANGELOG.md` and push a matching tag (`git tag v0.1.0 && git push origin v0.1.0`). The release workflow then attaches the archive to a GitHub release.
+### Releasing
+
+1. Set `<version>` in `appinfo/info.xml` and add a `## <version>` section to `CHANGELOG.md`. Use a version like `1.0.0-beta.1` for a test release; it goes to the App Store's beta channel.
+2. Push a matching tag: `git tag v0.1.1 && git push origin v0.1.1`.
+
+The release workflow runs the full CI suite on the tag, then builds the archive and attaches it to a GitHub release, with the CHANGELOG section as release notes. Once the App Store secrets below are set, it also code-signs the app and publishes the release to the Nextcloud App Store.
+
+**One-off App Store setup:**
+
+1. Create an account on [apps.nextcloud.com](https://apps.nextcloud.com) and copy the API token from *Account → API token*.
+2. Create the app's key and certificate request: `openssl req -nodes -newkey rsa:4096 -keyout graphcal.key -out graphcal.csr -subj "/CN=graphcal"`. Keep `graphcal.key` private and backed up; losing it means re-registering the app, which deletes all its releases.
+3. Open a pull request to [nextcloud/app-certificate-requests](https://github.com/nextcloud/app-certificate-requests) adding `graphcal/graphcal.csr`. Once it's merged, the signed certificate is at `graphcal/graphcal.crt` in that repository.
+4. Register the app on the App Store (*Developer → Register app*) with that certificate and the signature from `echo -n "graphcal" | openssl dgst -sha512 -sign graphcal.key | openssl base64`.
+5. In this repository, add the secrets `APP_PRIVATE_KEY` (the content of `graphcal.key`) and `APPSTORE_TOKEN` to the `appstore` environment (*Settings → Environments*). You can also add required reviewers there, so each publish waits for your approval.
+
+The repository has to be public: the App Store downloads the archive from the GitHub release, and shows the screenshots in `screenshots/` from the `main` branch. Once a release is signed, every later release must be signed too.
 
 The end-to-end tests run against a real Nextcloud with a Graph mock (`tests/integration/`). GitHub Actions runs them on a native install of Nextcloud 33 (SQLite), 34 (SQLite) and 35 (PostgreSQL), on Nextcloud 35 behind nginx + PHP-FPM, and on the real **Nextcloud All-in-One** Docker containers (Apache + PHP-FPM, PostgreSQL, Redis). They cover the sign-in popup, mirroring in both directions, invitation suppression, replies, deletes, refusing repeat patterns Microsoft 365 can't store, the webhook and disconnecting, plus a headless-browser test of the settings pages and the Calendar app. Each run uploads screenshots of every step (admin Entra ID settings, personal settings, sign-in, Calendar views) as a build artifact.
 

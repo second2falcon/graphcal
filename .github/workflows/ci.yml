@@ -178,6 +178,12 @@ jobs:
           php occ maintenance:install --database=sqlite --admin-user=admin --admin-pass=admin
           php occ app:enable graphcal
           php occ app:install calendar || echo "::warning::Calendar app not available from the App Store"
+      - name: Code-sign the archive with a throwaway certificate (the release's App Store path)
+        run: |
+          openssl req -x509 -nodes -newkey rsa:2048 -subj /CN=graphcal -days 1 -keyout "$RUNNER_TEMP/test.key" -out "$RUNNER_TEMP/test.crt" 2>/dev/null
+          archive=$(SIGN_KEY=$RUNNER_TEMP/test.key SIGN_CERT=$RUNNER_TEMP/test.crt OCC=$PWD/server/occ server/apps/graphcal/scripts/package.sh)
+          tar -xzOf "server/apps/graphcal/$archive" graphcal/appinfo/signature.json \
+            | php -r '$s = json_decode(stream_get_contents(STDIN), true); exit(isset($s["hashes"]["appinfo/info.xml"], $s["signature"], $s["certificate"]) ? 0 : 1);'
       - name: Start the Graph mock
         run: NC_WEB=external NC_DIR=$PWD/server server/apps/graphcal/tests/integration/setup.sh
       - name: End-to-end tests (no background jobs run for pushes or pulls)
