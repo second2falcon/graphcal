@@ -1,6 +1,6 @@
 # GraphCal
 
-> [!NOTE]
+> [!CAUTION]
 > This code is entirely AI-generated. It is tested against a Microsoft 365 tenant in production, and by the automated tests in GitHub Actions.
 
 Two-way sync between Nextcloud Calendar and Microsoft 365 / Exchange Online calendars via Microsoft Graph, for Nextcloud 33 and newer.
