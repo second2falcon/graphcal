@@ -281,6 +281,7 @@ settle(fn () => !$exists($boss));
 check(!$exists($boss) && !isset($listed()['Boss']), 'a calendar no longer shared with the user loses its Nextcloud copy');
 mockSet(['calendars' => [...mockState()['calendars'], ['id' => 'cal3', 'name' => 'Projects', 'hexColor' => '#107c10', 'canEdit' => true, 'canShare' => true, 'owner' => ['name' => 'Alice', 'address' => 'alice@contoso.test']]]]);
 $api('POST', '/refresh');
+settle(fn () => !str_contains(occ('background-job:list'), 'DeltaJob')); // the new calendar's first pull
 $projects = 'graphcal-' . substr(md5('cal3'), 0, 12);
 check($exists($projects), 'a calendar added in Outlook shows up after a refresh');
 mockSet(['calendars' => array_values(array_filter(mockState()['calendars'], fn ($c) => $c['id'] !== 'cal3'))]);
