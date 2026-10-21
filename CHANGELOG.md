@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## 0.1.2
+
 - Security: the Microsoft access token is only ever sent to the configured Graph endpoint; page links from responses pointing anywhere else are refused.
 - Security: paging through Graph results stops at loops and after 2000 pages, keeping the previous sync position.
 - Calendars deleted in Outlook or no longer shared with you lose their Nextcloud copy. The calendar list is re-checked hourly, so new Outlook calendars also appear without pressing *Refresh*.

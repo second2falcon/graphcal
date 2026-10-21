@@ -35,7 +35,7 @@ Copy the archive to your server, for example with `scp`. Don't use GitHub's *Cod
 Set the two paths at the top, then run the commands on the server. They replace any older `graphcal` folder, hand the files to the web server user (`www-data` on Debian/Ubuntu; `apache` or `nginx` on some other systems) and enable the app.
 
 ```sh
-ARCHIVE=~/graphcal-0.1.1.tar.gz   # the archive you downloaded
+ARCHIVE=~/graphcal-0.1.2.tar.gz   # the archive you downloaded
 NC=/var/www/nextcloud             # your Nextcloud folder
 sudo rm -rf "$NC/apps/graphcal"
 sudo tar -xzf "$ARCHIVE" -C "$NC/apps"
@@ -50,7 +50,7 @@ If your `config.php` defines `apps_paths`, use the folder marked `'writable' => 
 AIO keeps additional apps in `custom_apps` inside the `nextcloud-aio-nextcloud` container. Run on the Docker host:
 
 ```sh
-ARCHIVE=~/graphcal-0.1.1.tar.gz   # the archive you downloaded
+ARCHIVE=~/graphcal-0.1.2.tar.gz   # the archive you downloaded
 sudo docker cp "$ARCHIVE" nextcloud-aio-nextcloud:/tmp/graphcal.tar.gz
 sudo docker exec nextcloud-aio-nextcloud sh -c 'mkdir -p /var/www/html/custom_apps && cd /var/www/html/custom_apps && rm -rf graphcal && tar -xzf /tmp/graphcal.tar.gz && chown -R www-data:www-data graphcal && rm /tmp/graphcal.tar.gz'
 sudo docker exec --user www-data nextcloud-aio-nextcloud php occ app:enable graphcal
@@ -133,7 +133,7 @@ scripts/package.sh   # builds build/graphcal-<version>.tar.gz
 ### Releasing
 
 1. Set `<version>` in `appinfo/info.xml` and add a `## <version>` section to `CHANGELOG.md`. Use a version like `1.0.0-beta.1` for a test release; it goes to the App Store's beta channel.
-2. Push a matching tag: `git tag v0.1.1 && git push origin v0.1.1`.
+2. Push a matching tag: `git tag v0.1.2 && git push origin v0.1.2`.
 
 The release workflow runs the full CI suite on the tag, then builds the archive and attaches it to a GitHub release, with the CHANGELOG section as release notes. Once the App Store secrets below are set, it also code-signs the app and publishes the release to the Nextcloud App Store.
 
