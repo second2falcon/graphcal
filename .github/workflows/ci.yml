@@ -24,8 +24,8 @@ jobs:
       matrix:
         php: ['8.2', '8.5']
     steps:
-      - uses: actions/checkout@v5
-      - uses: shivammathur/setup-php@v2
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
         with:
           php-version: ${{ matrix.php }}
           extensions: intl, mbstring, xml
@@ -43,7 +43,7 @@ jobs:
         run: scripts/package.sh
       - name: Upload the archive (for manual installation and testing)
         if: matrix.php == '8.2'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: graphcal-app-archive
           path: build/graphcal-*.tar.gz
@@ -53,7 +53,7 @@ jobs:
     name: Validate appinfo/info.xml
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq libxml2-utils
       - run: curl -sSfL -o info.xsd https://raw.githubusercontent.com/nextcloud/appstore/master/nextcloudappstore/api/v1/release/info.xsd
       - run: xmllint appinfo/info.xml --schema info.xsd --noout
@@ -62,8 +62,8 @@ jobs:
     name: REUSE licensing
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: fsfe/reuse-action@v6
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: fsfe/reuse-action@676e2d560c9a403aa252096d99fcab3e1132b0f5 # v6.0.0
 
   integration:
     name: Nextcloud ${{ matrix.server }} (PHP ${{ matrix.php }}, ${{ matrix.db }})
@@ -86,17 +86,17 @@ jobs:
         options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - name: Checkout Nextcloud server
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           repository: nextcloud/server
           ref: ${{ matrix.server }}
           submodules: true
           path: server
       - name: Checkout app
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           path: server/apps/graphcal
-      - uses: shivammathur/setup-php@v2
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
         with:
           php-version: ${{ matrix.php }}
           extensions: ctype, curl, dom, fileinfo, gd, intl, mbstring, openssl, pdo_sqlite, pdo_pgsql, posix, sqlite3, xml, zip
@@ -128,7 +128,7 @@ jobs:
       - name: Upload screenshots
         id: screenshots
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: screenshots-nextcloud-${{ matrix.server }}
           path: ${{ runner.temp }}/screenshots
@@ -151,14 +151,14 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout Nextcloud server
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           repository: nextcloud/server
           ref: stable35
           submodules: true
           path: server
       - name: Checkout app
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           path: server/apps/graphcal
       - name: Install nginx and PHP-FPM
@@ -197,7 +197,7 @@ jobs:
       - name: Upload screenshots
         id: screenshots
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: screenshots-nextcloud-stable35-fpm
           path: ${{ runner.temp }}/screenshots
@@ -230,15 +230,15 @@ jobs:
       OCC: docker exec -e OC_PASS --user www-data nextcloud-aio-nextcloud php /var/www/html/occ
     steps:
       - name: Checkout app
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           path: graphcal
       - name: Checkout Nextcloud All-in-One
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           repository: nextcloud/all-in-one
           path: all-in-one
-      - uses: shivammathur/setup-php@v2
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
         with:
           php-version: '8.4'
           coverage: none
@@ -259,7 +259,7 @@ jobs:
       - name: Upload screenshots
         id: screenshots
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: screenshots-nextcloud-aio
           path: ${{ runner.temp }}/screenshots

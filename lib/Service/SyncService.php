@@ -39,6 +39,8 @@ class SyncService {
 	private const WINDOW_PAST = 'P1Y';
 	private const WINDOW_FUTURE = 'P2Y';
 	private const REBASE_AFTER = 30 * 86400;
+	/** Re-read the calendar list (added, removed or unshared calendars) at most this often. */
+	private const RECHECK_CALENDARS = 3600;
 
 	private const EVENT_FIELDS = 'id,iCalUId,changeKey,type,seriesMasterId,subject,body,start,end,isAllDay,location,attendees,organizer,isOrganizer,responseStatus,recurrence,originalStartTimeZone,sensitivity,showAs,categories,isReminderOn,reminderMinutesBeforeStart,isCancelled,lastModifiedDateTime';
 
@@ -59,19 +61,31 @@ class SyncService {
 
 	/* ================================================================ calendars */
 
-	/** Read the user's Outlook calendars; own calendars are enabled on first sight, shared ones are opt-in. */
+	/**
+	 * Read the user's Outlook calendars; own calendars are enabled on first sight, shared ones are opt-in.
+	 * Calendars that are gone from the list (deleted, or no longer shared) lose their Nextcloud copy.
+	 */
 	public function refreshCalendars(string $userId): void {
 		// Graph v1.0 rejects isSharedWithMe in $select (documented, but beta-only in practice), so tell shared
 		// calendars apart by owner: only the owner can share a calendar, and owner is whoever shared it with us.
 		$me = $this->ms->msEmail($userId);
+		$listed = [];
 		foreach ($this->ms->graphAll($userId, '/me/calendars?$select=id,name,hexColor,canEdit,canShare,owner&$top=100') as $c) {
 			$owner = strtolower((string)($c['owner']['address'] ?? ''));
 			$shared = !($c['canShare'] ?? true) && $owner !== '' && $owner !== $me;
 			$row = $this->store->upsertCalendar($userId, (string)$c['id'], '', (string)$c['name'], $shared, (bool)($c['canEdit'] ?? true), !$shared);
+			$listed[$row['id']] = true;
 			if ($row['enabled'] && !$row['nc_calendar_id']) {
 				$this->enable($userId, (int)$row['id'], (string)($c['hexColor'] ?? ''));
 			}
 		}
+		// Only after the whole list was read: a failed request throws above and removes nothing.
+		foreach ($this->store->calendars($userId) as $row) {
+			if ($row['owner'] === '' && !isset($listed[$row['id']])) {
+				$this->removeCalendar($row);
+			}
+		}
+		$this->userConfig->setValueInt($userId, Microsoft::APP, 'calendars_checked', $this->time->getTime());
 	}
 
 	/** Add another person's calendar by address (they must have shared or delegated it). */
@@ -114,6 +128,23 @@ class SyncService {
 			$this->store->deleteEventsOfCalendar($row['nc_calendar_id']);
 		}
 		$this->store->updateCalendar($row['id'], ['enabled' => false, 'nc_calendar_id' => 0, 'delta_link' => null]);
+	}
+
+	/** The source calendar is gone or no longer shared with the user: drop the copy and the entry. */
+	private function removeCalendar(array $row): void {
+		$this->logger->info('Calendar no longer available in Microsoft 365, removing its copy', ['app' => Microsoft::APP, 'user' => $row['user_id'], 'calendar' => $row['name']]);
+		$this->disable($row);
+		$this->store->deleteCalendar($row['id']);
+	}
+
+	/** Confirm with Graph that a calendar is gone (404) or no longer accessible (403), not a passing error. */
+	private function calendarGone(string $userId, array $cal): bool {
+		try {
+			$this->ms->graph($userId, 'GET', $this->base($cal) . '/calendars/' . rawurlencode($cal['graph_id']) . '?$select=id');
+			return false;
+		} catch (GraphError $e) {
+			return in_array($e->status, [403, 404], true);
+		}
 	}
 
 	/** Remove everything this app created for a user (disconnect, user deletion). */
@@ -186,6 +217,10 @@ class SyncService {
 			return;
 		}
 		try {
+			// ponytail: refreshCalendars() from the settings page runs without this lock; the race is a retried job.
+			if ($this->time->getTime() - $this->userConfig->getValueInt($userId, Microsoft::APP, 'calendars_checked') >= self::RECHECK_CALENDARS) {
+				$this->refreshCalendars($userId);
+			}
 			$this->pullCalendars($userId);
 		} finally {
 			$this->locking->releaseLock($lock, ILockingProvider::LOCK_EXCLUSIVE);
@@ -201,6 +236,8 @@ class SyncService {
 				if ($e->status === 410 || in_array($e->graphCode, ['syncStateNotFound', 'resyncRequired', 'SyncStateInvalid'], true)) {
 					$this->store->updateCalendar($cal['id'], ['delta_link' => null]);
 					$this->pullCalendar($userId, $me, $this->store->calendar($cal['id']));
+				} elseif (in_array($e->status, [403, 404], true) && $this->calendarGone($userId, $cal)) {
+					$this->removeCalendar($cal);
 				} else {
 					throw $e;
 				}
@@ -212,7 +249,7 @@ class SyncService {
 		$ncId = $cal['nc_calendar_id'];
 		$base = $this->base($cal);
 		[$link, $since] = $this->deltaState($cal);
-		if ($link === '' || $this->time->getTime() - $since > self::REBASE_AFTER) {
+		if ($link === '' || !$this->ms->isGraphUrl($link) || $this->time->getTime() - $since > self::REBASE_AFTER) {
 			$now = new DateTimeImmutable('@' . $this->time->getTime());
 			$link = $base . '/calendars/' . rawurlencode($cal['graph_id']) . '/calendarView/delta?' . http_build_query([
 				'startDateTime' => $now->sub(new \DateInterval(self::WINDOW_PAST))->format('Y-m-d\TH:i:s\Z'),
@@ -223,9 +260,10 @@ class SyncService {
 
 		$masters = [];
 		$unknownRemoval = false;
+		$seen = [];
 		$prefer = ['Prefer' => 'IdType="ImmutableId", outlook.body-content-type="text", odata.maxpagesize=100'];
 		while (true) {
-			$page = $this->ms->graph($userId, 'GET', $link, null, $prefer);
+			$page = $this->ms->graph($userId, 'GET', Microsoft::follow($seen, $link), null, $prefer);
 			foreach ($page['value'] ?? [] as $item) {
 				if (isset($item['@removed'])) {
 					$row = $this->store->eventByGraphId($ncId, (string)$item['id']);

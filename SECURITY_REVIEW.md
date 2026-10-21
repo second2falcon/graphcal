@@ -61,3 +61,17 @@ These are point-in-time database results; they do not establish that a package i
 ## Review limits
 
 This review covers the checked-in repository, not the deployed Nextcloud server, reverse proxy, Microsoft tenant, app-store account, or live GitHub repository settings. No tests, integration runs, or dynamic security scans were performed.
+
+## Resolution
+
+All findings were addressed on 2026-10-21. The integration tests cover each P2 fix, and fail without it.
+
+| Finding | Change |
+|---|---|
+| [P2] Bearer token to an arbitrary host | `Microsoft::graph()` refuses any absolute URL that doesn't start with the configured Graph origin plus `/` (same scheme, host and port, no user info), so stored or returned next/delta links can't take the token elsewhere. A stored delta link on another origin is discarded and the sync starts fresh. The Graph base URL stays an `occ`-only app setting (`graph_url`, for tests and sovereign clouds). |
+| [P2] Unbounded pagination | `Microsoft::follow()` stops at a repeated link or after `MAX_PAGES` (2000) pages, in both `graphAll()` and the calendar delta loop. The sync fails without saving, so the previous delta cursor is kept. |
+| [P2] Removed or revoked calendars | `refreshCalendars()` removes the copy of any listed calendar missing from a complete `/me/calendars` response, and it now also runs from the pull at most hourly. A 403/404 on a calendar's delta is confirmed with a `GET` on the calendar itself before its copy is removed; other errors change nothing. |
+| [P3] Mutable action tags | All actions are pinned to full commit SHAs (version in a comment), and `.github/dependabot.yml` proposes updates as pull requests. The release job's Nextcloud server checkout (used to sign the app) is pinned to the v35.0.2 commit. Protecting `v*` tags and requiring reviewers on the `appstore` environment are repository settings for the owner. |
+
+On the npm note: `tests/integration/package.json` pins `playwright` exactly, and it pins its only dependency (`playwright-core`) exactly, so the test tree doesn't drift without a lockfile.
+

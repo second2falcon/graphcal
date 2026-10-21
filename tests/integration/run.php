@@ -86,6 +86,12 @@ function mockState(): array {
 	return json_decode(http('GET', "$mock/_state")['body'], true);
 }
 
+/** Change top-level keys of the mock's state. */
+function mockSet(array $changes): void {
+	global $mock;
+	http('PUT', "$mock/_state", json_encode(array_replace(mockState(), $changes)), ['Content-Type: application/json']);
+}
+
 function mockRequests(string $method, string $pathPattern): array {
 	return array_values(array_filter(mockState()['requests'], fn ($r) => $r['method'] === $method && preg_match($pathPattern, $r['path'])));
 }
@@ -248,8 +254,40 @@ dav('DELETE', 'alice', "$calendar/meeting-1.ics");
 pushed();
 check(count(mockRequests('DELETE', '#^/v1\.0/me/events/ev\d+$#')) === 1, 'delete sent to Exchange (which sends the cancellation)');
 
-echo "Disconnect\n";
+echo "Bad page links and calendars that disappear\n";
 $csrf = json_decode(http('GET', "$nc/index.php/csrftoken", null, [], 'alice:' . PASS, $jar)['body'], true)['token'] ?? '';
+$api = fn (string $method, string $path, array $body = []) => json_decode(http($method, "$nc/index.php/apps/graphcal/settings/personal$path",
+	$method === 'GET' ? null : json_encode($body), ['Content-Type: application/json', "requesttoken: $csrf"], 'alice:' . PASS, $jar)['body'], true);
+$listed = fn () => array_column($api('GET', '')['calendars'] ?? [], null, 'name');
+$notify = fn () => http('POST', "$nc/index.php/apps/graphcal/webhook/alice", json_encode(['value' => [['clientState' => $sub['clientState'], 'changeType' => 'updated']]]), ['Content-Type: application/json']);
+$exists = fn (string $cal) => dav('PROPFIND', 'alice', "$cal/", null, ['Depth: 0'])['status'] === 207;
+$deltas = fn () => count(mockRequests('GET', '#^/v1\.0/me/calendars/cal2/calendarView/delta$#'));
+$boss = 'graphcal-' . substr(md5('cal2'), 0, 12);
+$api('POST', '/calendar/' . $listed()['Boss']['id'], ['enabled' => true]);
+settle(fn () => $deltas() > 0);
+check($exists($boss) && $deltas() > 0, 'shared calendar switched on and synced');
+foreach (['foreign' => 'a page link to another origin is refused, so the token stays with Graph', 'loop' => 'a page link loop is stopped instead of followed forever'] as $trap => $what) {
+	mockSet(['trap' => ['cal2' => $trap]]);
+	$before = $deltas();
+	$notify();
+	settle(fn () => $deltas() > $before);
+	usleep(500000);
+	$n = $deltas() - $before;
+	check($n >= 1 && $n <= 3 && mockRequests('GET', '#^/v1\.0/steal$#') === [], $what, "$n delta requests");
+}
+mockSet(['trap' => [], 'calendars' => array_values(array_filter(mockState()['calendars'], fn ($c) => $c['id'] !== 'cal2'))]);
+$notify();
+settle(fn () => !$exists($boss));
+check(!$exists($boss) && !isset($listed()['Boss']), 'a calendar no longer shared with the user loses its Nextcloud copy');
+mockSet(['calendars' => [...mockState()['calendars'], ['id' => 'cal3', 'name' => 'Projects', 'hexColor' => '#107c10', 'canEdit' => true, 'canShare' => true, 'owner' => ['name' => 'Alice', 'address' => 'alice@contoso.test']]]]);
+$api('POST', '/refresh');
+$projects = 'graphcal-' . substr(md5('cal3'), 0, 12);
+check($exists($projects), 'a calendar added in Outlook shows up after a refresh');
+mockSet(['calendars' => array_values(array_filter(mockState()['calendars'], fn ($c) => $c['id'] !== 'cal3'))]);
+$api('POST', '/refresh');
+check(!$exists($projects) && !isset($listed()['Projects']), 'a calendar deleted in Outlook is removed after a refresh');
+
+echo "Disconnect\n";
 $off = http('POST', "$nc/index.php/apps/graphcal/settings/personal/disconnect", '{}', ['Content-Type: application/json', "requesttoken: $csrf"], 'alice:' . PASS, $jar);
 $state = json_decode($off['body'], true);
 check($off['status'] === 200 && ($state['connected'] ?? true) === false && ($state['calendars'] ?? null) === [], 'disconnect removes tokens and calendars', $off['status'] . ' ' . $off['body']);

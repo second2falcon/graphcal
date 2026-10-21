@@ -110,6 +110,7 @@ Each user opens *Personal settings → GraphCal → Connect Microsoft 365*. A Mi
 - **Unsupported repeat patterns are rejected when you save**, rather than stored in a way Outlook can't show. Examples are several days of the month, "second to last weekday", or several months. The Calendar app then shows a short explanation, e.g. "Microsoft 365 doesn't support this repeat pattern: several days, or the last day, of a month."
 - **Meetings can't be moved between calendars**, because Graph has no move operation. Plain events can.
 - **Graph keeps only one reminder per event.**
+- **Calendars deleted in Outlook, or no longer shared with you, disappear from Nextcloud too.** The calendar list is checked every hour, or right away with *Refresh calendar list*.
 - **Shared calendars are polled every 5 minutes.** Microsoft does not send change notifications for them with delegated permissions.
 - **Restoring a deleted meeting from the Nextcloud trash creates it again in Outlook**, so Exchange sends the invitations again.
 

@@ -28,7 +28,7 @@ jobs:
     env:
       APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: Check that the tag matches appinfo/info.xml
         run: |
           version=$(php -r 'echo simplexml_load_file("appinfo/info.xml")->version;')
@@ -48,10 +48,10 @@ jobs:
           fi
       - name: Checkout Nextcloud server (its occ signs the app)
         if: env.APP_PRIVATE_KEY != ''
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           repository: nextcloud/server
-          ref: stable35
+          ref: ba900af933e61ffa005315b09d6454bfbbcbcc81 # v35.0.2; a fixed commit, as this job holds the signing key
           submodules: true
           path: build/nextcloud
       - name: Get the signing key and the app certificate

@@ -1,0 +1,10 @@
+# SPDX-FileCopyrightText: 2026 GraphCal contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Actions are pinned to commit SHAs; Dependabot proposes reviewed updates as pull requests.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

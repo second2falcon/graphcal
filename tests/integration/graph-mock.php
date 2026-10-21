@@ -10,6 +10,7 @@ declare(strict_types=1);
  *   MOCK_STATE=/tmp/state.json php -S 127.0.0.1:8090 tests/integration/graph-mock.php
  * Only the calls GraphCal makes are implemented. Every request is logged in state.requests.
  * Test control: GET/PUT /_state, POST /_event (create or update an event as if done in Outlook).
+ * state.trap[calendarId] = 'loop' | 'foreign' makes that calendar's delta return a bad @odata.nextLink.
  */
 
 // Only ever run by PHP's built-in test server, never by a real web server serving the apps folder.
@@ -70,7 +71,7 @@ $selectable = [
 	'user' => 'displayName,givenName,id,mail,surname,userPrincipalName',
 ];
 if (isset($query['$select']) && str_starts_with($path, '/v1.0/')) {
-	$type = preg_match('#/calendars?$#', $path) ? 'calendar' : (preg_match('#^/v1\.0/(me|users/[^/]+)$#', $path) ? 'user' : 'event');
+	$type = preg_match('#/calendars?(/[^/]+)?$#', $path) ? 'calendar' : (preg_match('#^/v1\.0/(me|users/[^/]+)$#', $path) ? 'user' : 'event');
 	foreach (explode(',', $query['$select']) as $prop) {
 		if (!in_array($prop, explode(',', $selectable[$type]), true)) {
 			$out(400, ['error' => ['code' => 'BadRequest', 'message' => "Parsing OData Select and Expand failed: Could not find a property named '$prop' on type 'microsoft.graph.$type'."]]);
@@ -105,7 +106,26 @@ switch (true) {
 	case $path === '/v1.0/me/calendars':
 		$out(200, ['value' => $state['calendars']]);
 
+	case preg_match('#^/v1\.0/me/calendars/([^/]+)$#', $path, $m) === 1 && $method === 'GET':
+		foreach ($state['calendars'] as $c) {
+			if ($c['id'] === $m[1]) {
+				$out(200, $c);
+			}
+		}
+		$out(404, ['error' => ['code' => 'ErrorItemNotFound', 'message' => 'The specified object was not found in the store.']]);
+
 	case preg_match('#^/v1\.0/me/calendars/([^/]+)/calendarView/delta$#', $path, $m) === 1:
+		if (!in_array($m[1], array_column($state['calendars'], 'id'), true)) {
+			$out(404, ['error' => ['code' => 'ErrorItemNotFound', 'message' => 'The specified object was not found in the store.']]);
+		}
+		$trap = $state['trap'][$m[1]] ?? '';
+		if ($trap === 'loop') {
+			$out(200, ['value' => [], '@odata.nextLink' => 'http://' . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI']]);
+		}
+		if ($trap === 'foreign') {
+			// Reaches this mock too, so a leaked request would show up in state.requests.
+			$out(200, ['value' => [], '@odata.nextLink' => 'http://intruder@' . $_SERVER['HTTP_HOST'] . '/v1.0/steal']);
+		}
 		$since = (int)($query['$deltatoken'] ?? 0);
 		$items = [];
 		foreach ($state['events'] as $e) {

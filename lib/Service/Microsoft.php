@@ -22,6 +22,8 @@ use RuntimeException;
  */
 class Microsoft {
 	public const APP = 'graphcal';
+	/** Pages followed per listing at most: 2000 × 100 items covers the busiest calendar's 3-year window. */
+	public const MAX_PAGES = 2000;
 	public const SCOPES = 'openid profile email offline_access https://graph.microsoft.com/User.Read https://graph.microsoft.com/Calendars.ReadWrite https://graph.microsoft.com/Calendars.ReadWrite.Shared';
 
 	public function __construct(
@@ -125,7 +127,11 @@ class Microsoft {
 	 * Throws GraphError (with status) on failures; 429/503/504 are retried honouring Retry-After.
 	 */
 	public function graph(string $userId, string $method, string $path, ?array $body = null, array $headers = []): array {
-		$url = str_starts_with($path, 'https://') || str_starts_with($path, 'http://') ? $path : $this->graphUrl() . $path;
+		$url = str_contains($path, '://') ? $path : $this->graphUrl() . $path;
+		// next/delta links come from responses (and are stored): never send the token anywhere but Graph.
+		if (!$this->isGraphUrl($url)) {
+			throw new RuntimeException('Refusing to call a non-Graph URL: ' . (string)parse_url($url, PHP_URL_HOST));
+		}
 		$options = [
 			'http_errors' => false,
 			'timeout' => 30,
@@ -160,12 +166,32 @@ class Microsoft {
 	/** GET all pages of a collection. @return list<array> */
 	public function graphAll(string $userId, string $path): array {
 		$items = [];
+		$seen = [];
 		while ($path !== '') {
-			$page = $this->graph($userId, 'GET', $path);
+			$page = $this->graph($userId, 'GET', self::follow($seen, $path));
 			array_push($items, ...($page['value'] ?? []));
 			$path = (string)($page['@odata.nextLink'] ?? '');
 		}
 		return $items;
+	}
+
+	/** Whether $url is on the configured Graph origin (scheme, host and port; no user info). */
+	public function isGraphUrl(string $url): bool {
+		$base = parse_url($this->graphUrl());
+		$origin = $base['scheme'] . '://' . $base['host'] . (isset($base['port']) ? ':' . $base['port'] : '');
+		return str_starts_with($url, $origin . '/');
+	}
+
+	/**
+	 * Track a page link before requesting it: fails on a link seen before (a loop) or past MAX_PAGES,
+	 * so a misbehaving upstream can't keep a job paging forever. Callers keep their old cursor on failure.
+	 */
+	public static function follow(array &$seen, string $link): string {
+		if (isset($seen[$link]) || count($seen) >= self::MAX_PAGES) {
+			throw new RuntimeException('Microsoft Graph paging did not end (' . count($seen) . ' pages)');
+		}
+		$seen[$link] = true;
+		return $link;
 	}
 
 	private function tokenRequest(array $params): array {
