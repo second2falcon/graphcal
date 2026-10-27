@@ -151,4 +151,6 @@ The end-to-end tests run against a real Nextcloud with a Graph mock (`tests/inte
 
 ## License
 
-AGPL-3.0-or-later. Microsoft, Microsoft 365, Outlook and Exchange are trademarks of the Microsoft group of companies. This project is not affiliated with Microsoft.
+[AGPL-3.0-or-later](LICENSE), the same licence as Nextcloud itself. Any organisation may use GraphCal, changed or not, without obligations; only someone who offers a changed version to others (as a download or a hosted service) must publish those changes.
+
+Microsoft, Microsoft 365, Outlook and Exchange are trademarks of the Microsoft group of companies. This project is not affiliated with Microsoft.
