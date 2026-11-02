@@ -188,7 +188,7 @@ class SyncService {
 		if (!$this->jobList->has(PushJob::class, $args)) {
 			$this->jobList->add(PushJob::class, $args);
 		}
-		// ponytail: without PHP-FPM the client waits for this push (~1 s); still beats waiting for cron.
+		// Known limit: without PHP-FPM the client waits for this push (~1 s); still beats waiting for cron.
 		Deferred::afterResponse(fn () => $this->runQueued(PushJob::class, $args, fn () => $this->push($ncId, $uri)));
 	}
 
@@ -217,7 +217,7 @@ class SyncService {
 			return;
 		}
 		try {
-			// ponytail: refreshCalendars() from the settings page runs without this lock; the race is a retried job.
+			// Known limit: refreshCalendars() from the settings page runs without this lock; the race is a retried job.
 			if ($this->time->getTime() - $this->userConfig->getValueInt($userId, Microsoft::APP, 'calendars_checked') >= self::RECHECK_CALENDARS) {
 				$this->refreshCalendars($userId);
 			}
@@ -286,7 +286,7 @@ class SyncService {
 			break;
 		}
 		if ($unknownRemoval) {
-			// ponytail: refetch every known series of the calendar; fine for tens of series, track occurrence ids if it isn't.
+			// Known limit: refetch every known series of the calendar; fine for tens of series, track occurrence ids if it isn't.
 			foreach ($this->store->seriesOfCalendar($ncId) as $row) {
 				$masters[$row['graph_id']] = true;
 			}

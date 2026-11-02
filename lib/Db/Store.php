@@ -12,7 +12,7 @@ use OCP\IDBConnection;
 
 /**
  * Sync state: which Outlook calendar maps to which Nextcloud calendar, and which event to which object.
- * ponytail: plain arrays instead of Entity/QBMapper classes; two tables don't need an ORM.
+ * Plain arrays instead of Entity/QBMapper classes: two tables don't need an ORM.
  */
 class Store {
 	private const CAL = 'graphcal_calendars';
