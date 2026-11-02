@@ -1,0 +1,116 @@
+# SPDX-FileCopyrightText: 2026 GraphCal contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Push a tag like v0.1.0 (matching <version> in appinfo/info.xml) to publish a GitHub release
+# with graphcal-<version>.tar.gz, the archive for manual installation (see README).
+# Once the "appstore" environment has the APP_PRIVATE_KEY and APPSTORE_TOKEN secrets, the archive
+# is also code-signed and published to the Nextcloud App Store (README: Releasing).
+# Only tags on a commit of the default branch (main) are released, and the full CI suite runs on the
+# tagged commit first; nothing is published unless both pass.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  # Releases are only made from the default branch (main), which only changes through reviewed pull requests.
+  from-main:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0
+      - name: Check that the tagged commit is on the default branch
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" "origin/$DEFAULT_BRANCH"; then
+            echo "::error::$GITHUB_REF_NAME points to a commit that is not on $DEFAULT_BRANCH. Merge first, then tag on $DEFAULT_BRANCH."; exit 1
+          fi
+
+  ci:
+    needs: from-main
+    uses: ./.github/workflows/ci.yml
+
+  release:
+    needs: ci
+    runs-on: ubuntu-latest
+    environment: appstore
+    permissions:
+      contents: write
+    env:
+      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - name: Check that the tag matches appinfo/info.xml
+        run: |
+          version=$(php -r 'echo simplexml_load_file("appinfo/info.xml")->version;')
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match version '$version' in appinfo/info.xml"; exit 1
+          fi
+          echo "VERSION=$version" >> $GITHUB_ENV
+      - name: Take the release notes from CHANGELOG.md
+        run: |
+          # The section under "## 0.1.0" (or "## 0.1.0 - date", "## [0.1.0] - date") up to the next "## ".
+          awk -v v="$VERSION" '
+            $0 == "## " v || index($0, "## " v " ") == 1 || index($0, "## [" v "]") == 1 { on = 1; next }
+            /^## / { on = 0 }
+            on' CHANGELOG.md > notes.md
+          if ! grep -q '[^[:space:]]' notes.md; then
+            echo "::error::CHANGELOG.md has no (or an empty) section for $VERSION; add '## $VERSION' with the changes"; exit 1
+          fi
+      - name: Checkout Nextcloud server (its occ signs the app)
+        if: env.APP_PRIVATE_KEY != ''
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          repository: nextcloud/server
+          ref: ba900af933e61ffa005315b09d6454bfbbcbcc81 # v35.0.2; a fixed commit, as this job holds the signing key
+          submodules: true
+          path: build/nextcloud
+      - name: Get the signing key and the app certificate
+        if: env.APP_PRIVATE_KEY != ''
+        run: |
+          key="$RUNNER_TEMP/graphcal.key" crt="$RUNNER_TEMP/graphcal.crt"
+          printf '%s\n' "$APP_PRIVATE_KEY" > "$key"
+          curl -sSfL -o "$crt" https://raw.githubusercontent.com/nextcloud/app-certificate-requests/HEAD/graphcal/graphcal.crt \
+            || { echo "::error::No certificate at nextcloud/app-certificate-requests/graphcal/graphcal.crt yet"; exit 1; }
+          if [ "$(openssl x509 -noout -pubkey -in "$crt")" != "$(openssl pkey -pubout -in "$key")" ]; then
+            echo "::error::APP_PRIVATE_KEY does not belong to the graphcal certificate"; exit 1
+          fi
+          { echo "SIGN_KEY=$key"; echo "SIGN_CERT=$crt"; echo "OCC=$PWD/build/nextcloud/occ"; } >> $GITHUB_ENV
+      - name: Build and check the archive
+        run: scripts/package.sh
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          archive="build/graphcal-$VERSION.tar.gz"
+          args=(--title "GraphCal $VERSION" --notes-file notes.md)
+          if [[ "$VERSION" == *-* ]]; then args+=(--prerelease); fi
+          # Re-runnable: if a previous attempt already created the release, update it instead.
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "$archive" --clobber
+            gh release edit "$GITHUB_REF_NAME" "${args[@]}"
+          else
+            gh release create "$GITHUB_REF_NAME" "$archive" "${args[@]}"
+          fi
+      - name: Publish to the Nextcloud App Store
+        if: env.APP_PRIVATE_KEY != ''
+        env:
+          APPSTORE_TOKEN: ${{ secrets.APPSTORE_TOKEN }}
+        run: |
+          if [ -z "$APPSTORE_TOKEN" ]; then echo "::error::Add the APPSTORE_TOKEN secret to the appstore environment"; exit 1; fi
+          archive="build/graphcal-$VERSION.tar.gz"
+          jq -n --arg download "https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME/graphcal-$VERSION.tar.gz" \
+            --arg signature "$(openssl dgst -sha512 -sign "$SIGN_KEY" "$archive" | openssl base64 -A)" \
+            '{download: $download, signature: $signature, nightly: false}' > appstore-release.json
+          status=$(curl -sS -o appstore-response.txt -w '%{http_code}' -X POST https://apps.nextcloud.com/api/v1/apps/releases \
+            -H "Authorization: Token $APPSTORE_TOKEN" -H 'Content-Type: application/json' --data @appstore-release.json)
+          cat appstore-response.txt; echo
+          # 201: new release; 200: the same version again (re-run), updated.
+          if [ "$status" != 201 ] && [ "$status" != 200 ]; then echo "::error::The App Store answered HTTP $status"; exit 1; fi
+          echo "Published GraphCal $VERSION to the App Store: https://apps.nextcloud.com/apps/graphcal" >> $GITHUB_STEP_SUMMARY

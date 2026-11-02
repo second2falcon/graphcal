@@ -1,0 +1,279 @@
+# SPDX-FileCopyrightText: 2026 GraphCal contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, 'claude/**']
+  workflow_call: # the release workflow runs the full suite on the tagged commit first
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static:
+    name: Lint, unit tests, Psalm (PHP ${{ matrix.php }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.2', '8.5']
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: intl, mbstring, xml
+          coverage: none
+      - run: composer install --no-interaction --no-progress
+      - name: PHP syntax
+        run: composer run lint
+      - name: Unit tests
+        run: composer run test:unit
+      - name: Psalm
+        if: matrix.php == '8.2'
+        run: composer run psalm
+      - name: Build and check the installable archive
+        if: matrix.php == '8.2'
+        run: scripts/package.sh
+      - name: Upload the archive (for manual installation and testing)
+        if: matrix.php == '8.2'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: graphcal-app-archive
+          path: build/graphcal-*.tar.gz
+          if-no-files-found: error
+
+  info-xml:
+    name: Validate appinfo/info.xml
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq libxml2-utils
+      - run: curl -sSfL -o info.xsd https://raw.githubusercontent.com/nextcloud/appstore/master/nextcloudappstore/api/v1/release/info.xsd
+      - run: xmllint appinfo/info.xml --schema info.xsd --noout
+
+  reuse:
+    name: REUSE licensing
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: fsfe/reuse-action@676e2d560c9a403aa252096d99fcab3e1132b0f5 # v6.0.0
+
+  integration:
+    name: Nextcloud ${{ matrix.server }} (PHP ${{ matrix.php }}, ${{ matrix.db }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { server: stable33, php: '8.2', db: sqlite }
+          - { server: stable34, php: '8.4', db: sqlite }
+          - { server: stable35, php: '8.5', db: pgsql }
+    services:
+      postgres:
+        image: ${{ matrix.db == 'pgsql' && 'postgres:16' || '' }}
+        env:
+          POSTGRES_USER: nextcloud
+          POSTGRES_PASSWORD: nextcloud
+          POSTGRES_DB: nextcloud
+        ports: ['5432:5432']
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - name: Checkout Nextcloud server
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          repository: nextcloud/server
+          ref: ${{ matrix.server }}
+          submodules: true
+          path: server
+      - name: Checkout app
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          path: server/apps/graphcal
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: ctype, curl, dom, fileinfo, gd, intl, mbstring, openssl, pdo_sqlite, pdo_pgsql, posix, sqlite3, xml, zip
+          coverage: none
+      - name: Install Nextcloud
+        working-directory: server
+        run: |
+          if [ "${{ matrix.db }}" = pgsql ]; then
+            DB="--database=pgsql --database-host=127.0.0.1 --database-name=nextcloud --database-user=nextcloud --database-pass=nextcloud"
+          else
+            DB="--database=sqlite"
+          fi
+          php occ maintenance:install $DB --admin-user=admin --admin-pass=admin
+          php occ app:enable graphcal
+          php occ app:list --enabled | grep graphcal
+      - name: Install the Calendar app (for screenshots)
+        working-directory: server
+        run: php occ app:install calendar || echo "::warning::Calendar app not available from the App Store, its screenshots are skipped" 
+      - name: Start Nextcloud and the Graph mock
+        run: NC_DIR=$PWD/server server/apps/graphcal/tests/integration/setup.sh
+      - name: End-to-end tests
+        run: NC_DIR=$PWD/server php server/apps/graphcal/tests/integration/run.php
+      - name: Browser tests and screenshots
+        working-directory: server/apps/graphcal/tests/integration
+        run: |
+          npm install --no-package-lock --no-audit --no-fund
+          node node_modules/playwright/cli.js install --with-deps chromium
+          NC_DIR=$GITHUB_WORKSPACE/server SCREENSHOT_DIR=$RUNNER_TEMP/screenshots node browser.mjs
+      - name: Upload screenshots
+        id: screenshots
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: screenshots-nextcloud-${{ matrix.server }}
+          path: ${{ runner.temp }}/screenshots
+          if-no-files-found: ignore
+      - name: List screenshots in the job summary
+        if: always() && steps.screenshots.outputs.artifact-url != ''
+        run: |
+          echo "### Screenshots – Nextcloud ${{ matrix.server }}" >> $GITHUB_STEP_SUMMARY
+          echo "[Download all screenshots](${{ steps.screenshots.outputs.artifact-url }})" >> $GITHUB_STEP_SUMMARY
+          ls $RUNNER_TEMP/screenshots | sed 's/^/- /' >> $GITHUB_STEP_SUMMARY
+      - name: Logs on failure
+        if: failure()
+        run: |
+          tail -n 50 server/data/nextcloud.log || true
+          tail -n 50 /tmp/graphcal-nc.log /tmp/graphcal-mock.log || true
+
+  integration-fpm:
+    # Production-like: nginx + PHP-FPM, so sync runs right after each response (no worker, no cron).
+    name: Nextcloud stable35 behind nginx + PHP-FPM
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout Nextcloud server
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          repository: nextcloud/server
+          ref: stable35
+          submodules: true
+          path: server
+      - name: Checkout app
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          path: server/apps/graphcal
+      - name: Install nginx and PHP-FPM
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq nginx php8.3-fpm php8.3-cli php8.3-sqlite3 php8.3-xml php8.3-mbstring php8.3-gd php8.3-zip php8.3-intl php8.3-curl
+          sudo update-alternatives --set php /usr/bin/php8.3
+          # Run PHP-FPM and nginx as the runner user, who owns the checkout and config.php.
+          U=$(id -un); G=$(id -gn)
+          sudo sed -i "s/^user = .*/user = $U/; s/^group = .*/group = $G/; s/^;*listen.owner = .*/listen.owner = $U/; s/^;*listen.group = .*/listen.group = $G/" /etc/php/8.3/fpm/pool.d/www.conf
+          sudo sed -i "s/^user .*/user $U $G;/" /etc/nginx/nginx.conf
+          sed "s#NC_ROOT#$GITHUB_WORKSPACE/server#" server/apps/graphcal/tests/integration/nginx.conf | sudo tee /etc/nginx/sites-enabled/default >/dev/null
+          sudo systemctl restart php8.3-fpm nginx
+      - name: Install Nextcloud
+        working-directory: server
+        run: |
+          php occ maintenance:install --database=sqlite --admin-user=admin --admin-pass=admin
+          php occ app:enable graphcal
+          php occ app:install calendar || echo "::warning::Calendar app not available from the App Store"
+      - name: Code-sign the archive with a throwaway certificate (the release's App Store path)
+        run: |
+          openssl req -x509 -nodes -newkey rsa:2048 -subj /CN=graphcal -days 1 -keyout "$RUNNER_TEMP/test.key" -out "$RUNNER_TEMP/test.crt" 2>/dev/null
+          archive=$(SIGN_KEY=$RUNNER_TEMP/test.key SIGN_CERT=$RUNNER_TEMP/test.crt OCC=$PWD/server/occ server/apps/graphcal/scripts/package.sh)
+          tar -xzOf "server/apps/graphcal/$archive" graphcal/appinfo/signature.json \
+            | php -r '$s = json_decode(stream_get_contents(STDIN), true); exit(isset($s["hashes"]["appinfo/info.xml"], $s["signature"], $s["certificate"]) ? 0 : 1);'
+      - name: Start the Graph mock
+        run: NC_WEB=external NC_DIR=$PWD/server server/apps/graphcal/tests/integration/setup.sh
+      - name: End-to-end tests (no background jobs run for pushes or pulls)
+        run: NC_FPM=1 NC_DIR=$PWD/server php server/apps/graphcal/tests/integration/run.php
+      - name: Browser tests and screenshots
+        working-directory: server/apps/graphcal/tests/integration
+        run: |
+          npm install --no-package-lock --no-audit --no-fund
+          node node_modules/playwright/cli.js install --with-deps chromium
+          NC_DIR=$GITHUB_WORKSPACE/server SCREENSHOT_DIR=$RUNNER_TEMP/screenshots node browser.mjs
+      - name: Upload screenshots
+        id: screenshots
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: screenshots-nextcloud-stable35-fpm
+          path: ${{ runner.temp }}/screenshots
+          if-no-files-found: ignore
+      - name: List screenshots in the job summary
+        if: always() && steps.screenshots.outputs.artifact-url != ''
+        run: |
+          echo "### Screenshots – Nextcloud stable35 (nginx + PHP-FPM)" >> $GITHUB_STEP_SUMMARY
+          echo "[Download all screenshots](${{ steps.screenshots.outputs.artifact-url }})" >> $GITHUB_STEP_SUMMARY
+          ls $RUNNER_TEMP/screenshots | sed 's/^/- /' >> $GITHUB_STEP_SUMMARY
+      - name: Logs on failure
+        if: failure()
+        run: |
+          tail -n 80 server/data/nextcloud.log || true
+          sudo tail -n 50 /var/log/nginx/error.log /var/log/php8.3-fpm.log || true
+          tail -n 30 /tmp/graphcal-mock.log || true
+
+  integration-aio:
+    # The real Nextcloud All-in-One containers (official manual-install compose file): Apache in front
+    # of PHP-FPM, PostgreSQL, Redis, AIO's own cron. GraphCal is installed into custom_apps.
+    name: Nextcloud All-in-One (Docker)
+    runs-on: ubuntu-24.04
+    env:
+      ADMIN_PASS: Ci-Aio-Admin-Pass-2026
+      NC_URL: http://127.0.0.1:11000
+      MOCK_URL: http://host.docker.internal:8090
+      MOCK_BIND: 0.0.0.0
+      NC_WEB: external
+      NC_FPM: '1'
+      OCC: docker exec -e OC_PASS --user www-data nextcloud-aio-nextcloud php /var/www/html/occ
+    steps:
+      - name: Checkout app
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          path: graphcal
+      - name: Checkout Nextcloud All-in-One
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          repository: nextcloud/all-in-one
+          path: all-in-one
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: '8.4'
+          coverage: none
+      - name: Let the runner resolve host.docker.internal (the mock's address as seen from AIO)
+        run: echo "127.0.0.1 host.docker.internal" | sudo tee -a /etc/hosts
+      - name: Start Nextcloud AIO and install GraphCal
+        run: graphcal/tests/aio/start.sh "$PWD/all-in-one" "$PWD/graphcal"
+      - name: Start the Graph mock
+        run: graphcal/tests/integration/setup.sh
+      - name: End-to-end tests (no background jobs run for pushes or pulls)
+        run: php graphcal/tests/integration/run.php
+      - name: Browser tests and screenshots
+        working-directory: graphcal/tests/integration
+        run: |
+          npm install --no-package-lock --no-audit --no-fund
+          node node_modules/playwright/cli.js install --with-deps chromium
+          SCREENSHOT_DIR=$RUNNER_TEMP/screenshots node browser.mjs
+      - name: Upload screenshots
+        id: screenshots
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: screenshots-nextcloud-aio
+          path: ${{ runner.temp }}/screenshots
+          if-no-files-found: ignore
+      - name: List screenshots in the job summary
+        if: always() && steps.screenshots.outputs.artifact-url != ''
+        run: |
+          echo "### Screenshots – Nextcloud All-in-One" >> $GITHUB_STEP_SUMMARY
+          echo "[Download all screenshots](${{ steps.screenshots.outputs.artifact-url }})" >> $GITHUB_STEP_SUMMARY
+          ls $RUNNER_TEMP/screenshots | sed 's/^/- /' >> $GITHUB_STEP_SUMMARY
+      - name: Logs on failure
+        if: failure()
+        run: |
+          docker ps -a
+          docker logs --tail 80 nextcloud-aio-nextcloud || true
+          docker exec nextcloud-aio-nextcloud tail -n 60 /mnt/ncdata/nextcloud.log || true
+          tail -n 30 /tmp/graphcal-mock.log || true

@@ -1,0 +1,13 @@
+# SPDX-FileCopyrightText: 2026 GraphCal contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# CI-only tweaks on top of all-in-one/manual-install/latest.yml (the real AIO containers):
+# serve Nextcloud on plain http://127.0.0.1:11000 and let it reach the Graph mock on the host.
+services:
+  nextcloud-aio-nextcloud:
+    container_name: nextcloud-aio-nextcloud
+    environment:
+      - OVERWRITEHOST=127.0.0.1:11000
+      - OVERWRITEPROTOCOL=http
+    extra_hosts:
+      - host.docker.internal:host-gateway
