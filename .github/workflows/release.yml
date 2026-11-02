@@ -5,7 +5,8 @@
 # with graphcal-<version>.tar.gz, the archive for manual installation (see README).
 # Once the "appstore" environment has the APP_PRIVATE_KEY and APPSTORE_TOKEN secrets, the archive
 # is also code-signed and published to the Nextcloud App Store (README: Releasing).
-# The full CI suite runs on the tagged commit first; nothing is published unless it passes.
+# Only tags on a commit of the default branch (main) are released, and the full CI suite runs on the
+# tagged commit first; nothing is published unless both pass.
 name: Release
 
 on:
@@ -16,7 +17,23 @@ permissions:
   contents: read
 
 jobs:
+  # Releases are only made from the default branch (main), which only changes through reviewed pull requests.
+  from-main:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0
+      - name: Check that the tagged commit is on the default branch
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" "origin/$DEFAULT_BRANCH"; then
+            echo "::error::$GITHUB_REF_NAME points to a commit that is not on $DEFAULT_BRANCH. Merge first, then tag on $DEFAULT_BRANCH."; exit 1
+          fi
+
   ci:
+    needs: from-main
     uses: ./.github/workflows/ci.yml
 
   release:

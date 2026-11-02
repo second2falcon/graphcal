@@ -133,7 +133,8 @@ scripts/package.sh   # builds build/graphcal-<version>.tar.gz
 ### Releasing
 
 1. Set `<version>` in `appinfo/info.xml` and add a `## <version>` section to `CHANGELOG.md`. Use a version like `1.0.0-beta.1` for a test release; it goes to the App Store's beta channel.
-2. Push a matching tag: `git tag v0.1.2 && git push origin v0.1.2`.
+2. Merge that into `main` through a pull request.
+3. Tag the merged commit on `main` and push the tag: `git checkout main && git pull && git tag v0.1.3 && git push origin v0.1.3`. A tag on a commit that isn't on `main` is refused.
 
 The release workflow runs the full CI suite on the tag, then builds the archive and attaches it to a GitHub release, with the CHANGELOG section as release notes. Once the App Store secrets below are set, it also code-signs the app and publishes the release to the Nextcloud App Store.
 
