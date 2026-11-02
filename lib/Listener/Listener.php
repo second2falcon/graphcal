@@ -31,6 +31,7 @@ class Listener implements IEventListener {
 	) {
 	}
 
+	#[\Override]
 	public function handle(Event $event): void {
 		if ($event instanceof SabrePluginAuthInitEvent) {
 			$event->getServer()->addPlugin(new SchedulingGuard($this->store));

@@ -13,15 +13,18 @@ use OCP\Settings\ISettings;
 use OCP\Util;
 
 class Personal implements ISettings {
+	#[\Override]
 	public function getForm(): TemplateResponse {
 		Util::addScript(Microsoft::APP, 'personal');
 		return new TemplateResponse(Microsoft::APP, 'personal');
 	}
 
+	#[\Override]
 	public function getSection(): string {
 		return 'graphcal';
 	}
 
+	#[\Override]
 	public function getPriority(): int {
 		return 50;
 	}

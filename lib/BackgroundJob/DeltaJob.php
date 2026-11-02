@@ -21,6 +21,7 @@ class DeltaJob extends QueuedJob {
 	}
 
 	/** @param string $argument user id */
+	#[\Override]
 	protected function run($argument): void {
 		$this->sync->pull((string)$argument);
 	}

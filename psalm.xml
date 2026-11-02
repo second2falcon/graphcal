@@ -32,7 +32,7 @@
 				<file name="lib/Listener/Listener.php"/>
 			</errorLevel>
 		</MissingDependency>
-		<!-- Sabre\VObject exposes typed properties through magic __get (DTSTART is a DateTime property, ...). -->
+		<!-- Sabre\VObject exposes typed properties through magic __get/__set (DTSTART is a DateTime property, ...). -->
 		<UndefinedMethod>
 			<errorLevel type="suppress">
 				<referencedMethod name="Sabre\VObject\Property::getDateTime"/>
@@ -41,5 +41,15 @@
 				<referencedMethod name="Sabre\VObject\Node::add"/>
 			</errorLevel>
 		</UndefinedMethod>
+		<UndefinedMagicPropertyFetch>
+			<errorLevel type="suppress">
+				<file name="lib/Service/Converter.php"/>
+			</errorLevel>
+		</UndefinedMagicPropertyFetch>
+		<UndefinedMagicPropertyAssignment>
+			<errorLevel type="suppress">
+				<file name="lib/Service/Converter.php"/>
+			</errorLevel>
+		</UndefinedMagicPropertyAssignment>
 	</issueHandlers>
 </psalm>

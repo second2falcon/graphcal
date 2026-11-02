@@ -18,6 +18,7 @@ use OCP\Util;
  * @template-implements IEventListener<BeforeTemplateRenderedEvent>
  */
 class CalendarPageListener implements IEventListener {
+	#[\Override]
 	public function handle(Event $event): void {
 		if ($event instanceof BeforeTemplateRenderedEvent && $event->isLoggedIn() && $event->getResponse()->getApp() === 'calendar') {
 			Util::addScript('graphcal', 'calendar-errors');
