@@ -149,7 +149,7 @@ class Microsoft {
 			$response = $this->clientService->newClient()->request($method, $url, $options);
 			$status = $response->getStatusCode();
 			if (in_array($status, [429, 503, 504], true) && $attempt < 3) {
-				// ponytail: blocking sleep inside the job; fine for per-user serial work, queue-based backoff if it hurts.
+				// Known limit: blocking sleep inside the job; fine for per-user serial work, queue-based backoff if it hurts.
 				sleep(min(30, max(1, (int)$response->getHeader('Retry-After'))));
 				continue;
 			}
