@@ -21,7 +21,7 @@ jobs:
   from-main:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
       - name: Check that the tagged commit is on the default branch
@@ -45,7 +45,7 @@ jobs:
     env:
       APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Check that the tag matches appinfo/info.xml
         run: |
           version=$(php -r 'echo simplexml_load_file("appinfo/info.xml")->version;')
@@ -65,7 +65,7 @@ jobs:
           fi
       - name: Checkout Nextcloud server (its occ signs the app)
         if: env.APP_PRIVATE_KEY != ''
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: nextcloud/server
           ref: ba900af933e61ffa005315b09d6454bfbbcbcc81 # v35.0.2; a fixed commit, as this job holds the signing key
