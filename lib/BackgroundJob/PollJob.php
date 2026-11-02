@@ -31,6 +31,7 @@ class PollJob extends TimedJob {
 		$this->setInterval(300);
 	}
 
+	#[\Override]
 	protected function run($argument): void {
 		foreach ($this->store->users() as $userId) {
 			if (!$this->ms->isConnected($userId)) {

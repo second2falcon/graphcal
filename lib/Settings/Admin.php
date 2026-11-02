@@ -20,6 +20,7 @@ class Admin implements ISettings {
 	) {
 	}
 
+	#[\Override]
 	public function getForm(): TemplateResponse {
 		Util::addScript(Microsoft::APP, 'admin');
 		return new TemplateResponse(Microsoft::APP, 'admin', [
@@ -31,10 +32,12 @@ class Admin implements ISettings {
 		]);
 	}
 
+	#[\Override]
 	public function getSection(): string {
 		return 'graphcal';
 	}
 
+	#[\Override]
 	public function getPriority(): int {
 		return 60;
 	}

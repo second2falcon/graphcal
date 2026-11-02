@@ -17,18 +17,22 @@ class Section implements IIconSection {
 	) {
 	}
 
+	#[\Override]
 	public function getID(): string {
 		return 'graphcal';
 	}
 
+	#[\Override]
 	public function getName(): string {
 		return 'GraphCal';
 	}
 
+	#[\Override]
 	public function getPriority(): int {
 		return 80;
 	}
 
+	#[\Override]
 	public function getIcon(): string {
 		return $this->urlGenerator->imagePath('graphcal', 'app-dark.svg');
 	}

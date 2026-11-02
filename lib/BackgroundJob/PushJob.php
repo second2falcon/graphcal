@@ -24,6 +24,7 @@ class PushJob extends QueuedJob {
 	}
 
 	/** @param array{calendar: int, uri: string} $argument */
+	#[\Override]
 	protected function run($argument): void {
 		$this->sync->push((int)$argument['calendar'], (string)$argument['uri']);
 	}
