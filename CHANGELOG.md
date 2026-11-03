@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## 0.1.3
+
+First release on the Nextcloud App Store, code-signed with the app's Nextcloud certificate.
+
+- Releases are only made from `main`.
+- `LICENSE` file at the root (AGPL-3.0-or-later, unchanged), so GitHub shows the licence.
+- Development tools: Psalm 6 and Dependabot updates for Composer and the browser test.
+
 ## 0.1.2
 
 - Security: the Microsoft access token is only ever sent to the configured Graph endpoint; page links from responses pointing anywhere else are refused.
