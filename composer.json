@@ -14,7 +14,7 @@
 	"require-dev": {
 		"nextcloud/ocp": "dev-stable33",
 		"phpunit/phpunit": "^11.5",
-		"psalm/phar": "^6.20",
+		"psalm/phar": "^7.0",
 		"sabre/vobject": "4.5.*"
 	},
 	"scripts": {
