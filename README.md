@@ -21,18 +21,32 @@ Design and research: [docs/DESIGN.md](docs/DESIGN.md), [docs/RESEARCH.md](docs/R
 
 ## Installation
 
-GraphCal is not on the Nextcloud App Store yet. Install it manually from its release archive, `graphcal-<version>.tar.gz`. It contains a single folder named `graphcal` with only the app; there is no build step and nothing else to install.
+### From the App Store (recommended)
 
-### Get the archive
+GraphCal is on the [Nextcloud App Store](https://apps.nextcloud.com/apps/graphcal). As an administrator, open *Apps*, search for **GraphCal** and click *Download and enable*. Or from the command line:
 
-- **A released version:** download `graphcal-<version>.tar.gz` from [Releases](https://github.com/second2falcon/graphcal/releases).
-- **An unreleased build, for testing:** open a successful run of the [CI workflow](https://github.com/second2falcon/graphcal/actions/workflows/ci.yml) and download the `graphcal-app-archive` artifact. You need to be signed in to GitHub. It arrives as a `.zip` around the archive; unpack it with `unzip graphcal-app-archive.zip`, which gives you `graphcal-<version>.tar.gz`.
+```sh
+# Standard install (use your Nextcloud folder)
+sudo -u www-data php /var/www/nextcloud/occ app:install graphcal
+# Nextcloud All-in-One
+sudo docker exec --user www-data nextcloud-aio-nextcloud php occ app:install graphcal
+```
+
+Updates show up on the *Apps* page like those of any other app (or run `occ app:update graphcal`).
+
+This also works on hosted Nextcloud without shell access, if your provider allows App Store apps that aren't preinstalled; some managed hosts offer only a curated selection. The instance also needs:
+
+- cron for background jobs, which most providers run for you;
+- outbound HTTPS to `login.microsoftonline.com` and `graph.microsoft.com`;
+- ideally PHP-FPM. With it, Outlook changes arrive within seconds; without it, after up to 5 minutes.
+
+### Manual installation
+
+For servers without App Store access, install GraphCal from its release archive, `graphcal-<version>.tar.gz`, which you download from [Releases](https://github.com/second2falcon/graphcal/releases). It contains a single folder named `graphcal` with only the app; there is no build step and nothing else to install.
 
 Copy the archive to your server, for example with `scp`. Don't use GitHub's *Code → Download ZIP* or a `git clone` instead: the folder would have the wrong name (it must be exactly `graphcal`), and it would include the developer test tools.
 
-### Standard Nextcloud install
-
-Set the two paths at the top, then run the commands on the server. They replace any older `graphcal` folder, hand the files to the web server user (`www-data` on Debian/Ubuntu; `apache` or `nginx` on some other systems) and enable the app.
+**Standard Nextcloud.** Set the two paths at the top, then run the commands on the server. They replace any older `graphcal` folder, hand the files to the web server user (`www-data` on Debian/Ubuntu; `apache` or `nginx` on some other systems) and enable the app.
 
 ```sh
 ARCHIVE=~/graphcal-0.1.3.tar.gz   # the archive you downloaded
@@ -45,9 +59,7 @@ sudo -u www-data php "$NC/occ" app:enable graphcal
 
 If your `config.php` defines `apps_paths`, use the folder marked `'writable' => true` instead of `apps`, often `custom_apps`.
 
-### Nextcloud All-in-One (Docker)
-
-AIO keeps additional apps in `custom_apps` inside the `nextcloud-aio-nextcloud` container. Run on the Docker host:
+**Nextcloud All-in-One (Docker).** AIO keeps additional apps in `custom_apps` inside the `nextcloud-aio-nextcloud` container. Run on the Docker host:
 
 ```sh
 ARCHIVE=~/graphcal-0.1.3.tar.gz   # the archive you downloaded
@@ -56,24 +68,11 @@ sudo docker exec nextcloud-aio-nextcloud sh -c 'mkdir -p /var/www/html/custom_ap
 sudo docker exec --user www-data nextcloud-aio-nextcloud php occ app:enable graphcal
 ```
 
-The AIO test in CI installs GraphCal with exactly these commands. AIO already runs Nextcloud's cron every 5 minutes, so there is nothing else to set up. Two things to know:
+**Updating.** Run the same commands with the new archive. They replace the old `graphcal` folder, so no stale files remain. Then run `occ upgrade`: `sudo -u www-data php "$NC/occ" upgrade`, or on AIO `sudo docker exec --user www-data nextcloud-aio-nextcloud php occ upgrade`. Settings, tokens and sync state are kept, because they live in the database.
 
-- **GraphCal survives AIO container updates:** `custom_apps` lives on AIO's persistent volume.
-- **Major Nextcloud updates can switch it off.** During a major update, AIO disables every app in `custom_apps` and re-enables them afterwards. If the new Nextcloud version is newer than the highest one GraphCal supports (`max-version` in `appinfo/info.xml`, currently 35), GraphCal stays disabled and AIO sends you a notification. Install a GraphCal release that supports the new version; your settings and sync state are kept in the meantime.
+### Nextcloud All-in-One notes
 
-### Updating
-
-Run the same installation commands with the new archive. They replace the old `graphcal` folder, so no stale files remain. Then run `occ upgrade`: `sudo -u www-data php "$NC/occ" upgrade`, or on AIO `sudo docker exec --user www-data nextcloud-aio-nextcloud php occ upgrade`. Settings, tokens and sync state are kept, because they live in the database.
-
-### Hosted Nextcloud without shell access
-
-Without shell or file access, Nextcloud can only install apps from the App Store, through the Apps page; it has no way to upload an app archive. GraphCal has to be published on the App Store first. Check with your provider whether they allow App Store apps that aren't preinstalled, since some managed hosts offer only a curated selection.
-
-The instance also needs:
-
-- cron for background jobs, which most providers run for you;
-- outbound HTTPS to `login.microsoftonline.com` and `graph.microsoft.com`;
-- ideally PHP-FPM. With it, Outlook changes arrive within seconds; without it, after up to 5 minutes.
+AIO already runs Nextcloud's cron every 5 minutes, and GraphCal lives in `custom_apps` on AIO's persistent volume, so it survives container updates. During a **major** Nextcloud update, AIO disables every app in `custom_apps` and re-enables them afterwards. If the new Nextcloud version is newer than the highest one GraphCal supports (`max-version` in `appinfo/info.xml`, currently 35), GraphCal stays disabled and AIO sends you a notification; it comes back once a GraphCal version that supports it is installed. Your settings and sync state are kept in the meantime.
 
 ## Setup
 
@@ -130,25 +129,7 @@ composer run lint && composer run test:unit && composer run psalm
 scripts/package.sh   # builds build/graphcal-<version>.tar.gz
 ```
 
-### Releasing
-
-1. Set `<version>` in `appinfo/info.xml` and add a `## <version>` section to `CHANGELOG.md`. Use a version like `1.0.0-beta.1` for a test release; it goes to the App Store's beta channel.
-2. Merge that into `main` through a pull request.
-3. Tag the merged commit on `main` and push the tag: `git checkout main && git pull && git tag v0.1.3 && git push origin v0.1.3`. A tag on a commit that isn't on `main` is refused.
-
-The release workflow runs the full CI suite on the tag, then builds the archive and attaches it to a GitHub release, with the CHANGELOG section as release notes. Once the App Store secrets below are set, it also code-signs the app and publishes the release to the Nextcloud App Store.
-
-**One-off App Store setup:**
-
-1. Create an account on [apps.nextcloud.com](https://apps.nextcloud.com) and copy the API token from *Account → API token*.
-2. Create the app's key and certificate request: `openssl req -nodes -newkey rsa:4096 -keyout graphcal.key -out graphcal.csr -subj "/CN=graphcal"`. Keep `graphcal.key` private and backed up; losing it means re-registering the app, which deletes all its releases.
-3. Open a pull request to [nextcloud/app-certificate-requests](https://github.com/nextcloud/app-certificate-requests) adding `graphcal/graphcal.csr`. Once it's merged, the signed certificate is at `graphcal/graphcal.crt` in that repository.
-4. Register the app on the App Store (*Developer → Register app*) with that certificate and the signature from `echo -n "graphcal" | openssl dgst -sha512 -sign graphcal.key | openssl base64`.
-5. In this repository, add the secrets `APP_PRIVATE_KEY` (the content of `graphcal.key`) and `APPSTORE_TOKEN` to the `appstore` environment (*Settings → Environments*). You can also add required reviewers there, so each publish waits for your approval.
-
-The repository has to be public: the App Store downloads the archive from the GitHub release, and shows the screenshots in `screenshots/` from the `main` branch. Once a release is signed, every later release must be signed too.
-
-The end-to-end tests run against a real Nextcloud with a Graph mock (`tests/integration/`). GitHub Actions runs them on a native install of Nextcloud 33 (SQLite), 34 (SQLite) and 35 (PostgreSQL), on Nextcloud 35 behind nginx + PHP-FPM, and on the real **Nextcloud All-in-One** Docker containers (Apache + PHP-FPM, PostgreSQL, Redis). They cover the sign-in popup, mirroring in both directions, invitation suppression, replies, deletes, refusing repeat patterns Microsoft 365 can't store, the webhook and disconnecting, plus a headless-browser test of the settings pages and the Calendar app. Each run uploads screenshots of every step (admin Entra ID settings, personal settings, sign-in, Calendar views) as a build artifact.
+The end-to-end tests (`tests/integration/`) run against a real Nextcloud with a Graph mock, plus a headless-browser test of the settings pages and the Calendar app.
 
 ## License
 
