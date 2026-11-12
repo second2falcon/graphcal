@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## 0.1.4
+
+- The App Store description now states that the app is entirely AI-generated, like the README.
+- Development tools: Psalm 7 and Playwright 1.65.
+
 ## 0.1.3
 
 First release on the Nextcloud App Store, code-signed with the app's Nextcloud certificate.

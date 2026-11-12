@@ -49,7 +49,7 @@ Copy the archive to your server, for example with `scp`. Don't use GitHub's *Cod
 **Standard Nextcloud.** Set the two paths at the top, then run the commands on the server. They replace any older `graphcal` folder, hand the files to the web server user (`www-data` on Debian/Ubuntu; `apache` or `nginx` on some other systems) and enable the app.
 
 ```sh
-ARCHIVE=~/graphcal-0.1.3.tar.gz   # the archive you downloaded
+ARCHIVE=~/graphcal-0.1.4.tar.gz   # the archive you downloaded
 NC=/var/www/nextcloud             # your Nextcloud folder
 sudo rm -rf "$NC/apps/graphcal"
 sudo tar -xzf "$ARCHIVE" -C "$NC/apps"
@@ -62,7 +62,7 @@ If your `config.php` defines `apps_paths`, use the folder marked `'writable' => 
 **Nextcloud All-in-One (Docker).** AIO keeps additional apps in `custom_apps` inside the `nextcloud-aio-nextcloud` container. Run on the Docker host:
 
 ```sh
-ARCHIVE=~/graphcal-0.1.3.tar.gz   # the archive you downloaded
+ARCHIVE=~/graphcal-0.1.4.tar.gz   # the archive you downloaded
 sudo docker cp "$ARCHIVE" nextcloud-aio-nextcloud:/tmp/graphcal.tar.gz
 sudo docker exec nextcloud-aio-nextcloud sh -c 'mkdir -p /var/www/html/custom_apps && cd /var/www/html/custom_apps && rm -rf graphcal && tar -xzf /tmp/graphcal.tar.gz && chown -R www-data:www-data graphcal && rm /tmp/graphcal.tar.gz'
 sudo docker exec --user www-data nextcloud-aio-nextcloud php occ app:enable graphcal
