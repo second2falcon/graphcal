@@ -8,7 +8,9 @@
 	<id>graphcal</id>
 	<name>GraphCal</name>
 	<summary>Two-way sync between Nextcloud Calendar and Microsoft 365 / Exchange Online calendars</summary>
-	<description><![CDATA[GraphCal mirrors your Microsoft 365 / Exchange Online calendars into Nextcloud and pushes changes made in Nextcloud back, using Microsoft Graph.
+	<description><![CDATA[**Caution: this app is entirely AI-generated.** It is tested against a Microsoft 365 tenant in production, and by automated tests on Nextcloud 33–35 and Nextcloud All-in-One.
+
+GraphCal mirrors your Microsoft 365 / Exchange Online calendars into Nextcloud and pushes changes made in Nextcloud back, using Microsoft Graph.
 
 Meeting invitations, updates, cancellations and replies for synced calendars are sent by **Exchange**, not by Nextcloud, so Outlook users get native meeting requests.
 
@@ -17,7 +19,7 @@ Meeting invitations, updates, cancellations and replies for synced calendars are
 Requires an Entra ID app registration created by the administrator (see the README).
 
 Microsoft, Microsoft 365, Outlook and Exchange are trademarks of the Microsoft group of companies. This app is not affiliated with Microsoft.]]></description>
-	<version>0.1.3</version>
+	<version>0.1.4</version>
 	<licence>AGPL-3.0-or-later</licence>
 	<author>GraphCal contributors</author>
 	<namespace>GraphCal</namespace>
