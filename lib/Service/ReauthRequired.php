@@ -7,8 +7,6 @@ declare(strict_types=1);
 
 namespace OCA\GraphCal\Service;
 
-use RuntimeException;
-
 /** The user has to sign in to Microsoft again (refresh token expired or revoked). */
-class ReauthRequired extends RuntimeException {
+class ReauthRequired extends TokenError {
 }

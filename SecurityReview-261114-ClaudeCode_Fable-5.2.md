@@ -142,3 +142,26 @@ For Graph and token errors that is the intent. For anything else, such as a data
 - That the pinned action SHAs match the versions named in their comments.
 - Whether Guzzle's internal stack frames expose `client_secret` in logged traces (see finding 1).
 - Behaviour against a real tenant or a running server; the findings come from reading the code.
+
+## Resolution
+
+Findings 1 to 6 and four of the six hardening items were fixed on 2026-11-14; two hardening items were left unchanged on purpose (see below). Each fix has a test that fails without it. The end-to-end tests were run against Nextcloud `stable33`, and the password dialog was tried in a browser.
+
+| Finding | Change |
+|---|---|
+| 1. Credentials in logged traces | The parameters that carry codes and tokens are marked `#[\SensitiveParameter]`. Failures of the HTTP client are rethrown without the original exception, so its stack frames (client secret, access token) are never logged. Unit test: `tests/unit/MicrosoftTest.php`. |
+| 2. Sign-in started by another site | `OauthController::start()` requires Nextcloud's strict same-site cookie. |
+| 3. Sharees act as the owner | `SchedulingGuard` refuses every create, change, delete and move in a synced calendar by anyone but its owner. This covers people the calendar is shared with and Nextcloud delegates. They can still read it. Documented in the README. |
+| 4. Disabled users keep syncing | `PollJob` and `SyncService::pull()` skip accounts that are not enabled. |
+| 5. Text from the URL on the callback page | The callback checks the pending sign-in and `state` before it shows anything from the URL. |
+| 6. Raw exception messages | Users see Microsoft's answers and input errors only (`Microsoft::userMessage()`); everything else is logged and shown as a general message. |
+| 7. Admin settings | `saveAdmin()` and `importFromMail()` require password confirmation; the settings page opens Nextcloud's dialog. |
+| 7. HTTP redirects | Graph and token requests no longer follow redirects. |
+| 7. Signing key | The release job only exposes whether a key exists; the key itself goes to the one step that writes it to a file. |
+| 7. CI inputs | The Playwright install runs with `--ignore-scripts`. |
+
+Left unchanged, on purpose:
+
+- **Webhook rate limit.** Nextcloud limits per IP address, and Microsoft delivers every user's notifications from a few addresses. A limit would throttle genuine notifications, and Graph drops subscriptions whose endpoint answers slowly. The 64-character secret already makes guessing infeasible.
+- **Revoking tokens at Microsoft.** Entra ID offers no call that revokes only this app's refresh token; the available one signs the user out of every app. The README now says the tokens are deleted from Nextcloud.
+- **`info.xsd` and the Nextcloud branch heads in CI.** These jobs exist to test against the current upstream state, and they hold no secrets.

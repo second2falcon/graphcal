@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+Fixes for the security review of 2026-11-14.
+
+- Security: sign-in codes, tokens and the client secret can no longer end up in `nextcloud.log` when a request to Microsoft fails.
+- Security: only the owner can change a synced calendar. People it is shared with in Nextcloud can read it, but no longer create, change or delete events, which Exchange would have sent in the owner's name. Share or delegate the calendar in Outlook instead.
+- Security: another website can no longer start the Microsoft sign-in for a logged-in user, and the sign-in result page no longer shows text taken from the link.
+- Security: disabled Nextcloud accounts stop syncing.
+- Saving the administrator settings asks for the password again, as other sensitive Nextcloud settings do.
+- Unexpected errors show a general message; the details are in the Nextcloud log.
+
 ## 0.1.4
 
 - The App Store description now states that the app is entirely AI-generated, like the README.

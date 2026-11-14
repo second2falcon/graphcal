@@ -13,6 +13,7 @@ use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
+use OCP\AppFramework\Http\Attribute\StrictCookiesRequired;
 use OCP\AppFramework\Http\Attribute\UseSession;
 use OCP\AppFramework\Http\RedirectResponse;
 use OCP\AppFramework\Http\TemplateResponse;
@@ -36,8 +37,10 @@ class OauthController extends Controller {
 		parent::__construct(Microsoft::APP, $request);
 	}
 
+	// Strict cookies: only our own settings page can open this, another site can't start a sign-in for the user.
 	#[NoAdminRequired]
 	#[NoCSRFRequired]
+	#[StrictCookiesRequired]
 	#[UseSession]
 	#[FrontpageRoute(verb: 'GET', url: '/oauth/start')]
 	public function start(): RedirectResponse|TemplateResponse {
@@ -56,11 +59,12 @@ class OauthController extends Controller {
 	public function callback(string $code = '', string $state = '', string $error = '', string $error_description = ''): TemplateResponse {
 		$pending = $this->session->get('graphcal_oauth');
 		$this->session->remove('graphcal_oauth');
+		// Check the state first: without a sign-in of our own, nothing from the URL is shown (not Microsoft's error text either).
+		if (!is_array($pending) || !hash_equals((string)$pending['state'], $state) || ($code === '' && $error === '')) {
+			return $this->done('The sign-in request expired or did not match. Please try again.');
+		}
 		if ($error !== '') {
 			return $this->done($error_description ?: $error);
-		}
-		if (!is_array($pending) || $code === '' || !hash_equals((string)$pending['state'], $state)) {
-			return $this->done('The sign-in request expired or did not match. Please try again.');
 		}
 		$userId = (string)$this->userSession->getUser()?->getUID();
 		try {
@@ -68,7 +72,7 @@ class OauthController extends Controller {
 			$this->sync->refreshCalendars($userId);
 		} catch (Throwable $e) {
 			$this->logger->error('Microsoft sign-in failed', ['app' => Microsoft::APP, 'exception' => $e]);
-			return $this->done('Signing in to Microsoft 365 failed: ' . $e->getMessage());
+			return $this->done('Signing in to Microsoft 365 failed: ' . Microsoft::userMessage($e));
 		}
 		try {
 			$this->sync->ensureSubscription($userId);

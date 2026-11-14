@@ -107,6 +107,8 @@ Each user opens *Personal settings → GraphCal → Connect Microsoft 365*. A Mi
 
 - **Exchange is the source of truth.** For meetings organized by someone else, only your own response (accept/decline/tentative) is sent back to Exchange.
 - **Unsupported repeat patterns are rejected when you save**, rather than stored in a way Outlook can't show. Examples are several days of the month, "second to last weekday", or several months. The Calendar app then shows a short explanation, e.g. "Microsoft 365 doesn't support this repeat pattern: several days, or the last day, of a month."
+- **Only you can change your synced calendars.** Changes go to Exchange with your Microsoft account, and Exchange sends invitations in your name. So people you share a synced calendar with in Nextcloud, with or without edit rights, can only read it; saving shows "Only its owner can change a calendar that is synced with Microsoft 365". To let a colleague edit your calendar, share or delegate it in Outlook. They then add it under *Personal settings → GraphCal → Calendars shared with me*, and what they change goes to Exchange under their own account, where Exchange applies its sharing and send-on-behalf rules.
+- **Disabled Nextcloud accounts don't sync.** Syncing resumes when the account is enabled again.
 - **Meetings can't be moved between calendars**, because Graph has no move operation. Plain events can.
 - **Graph keeps only one reminder per event.**
 - **Calendars deleted in Outlook, or no longer shared with you, disappear from Nextcloud too.** The calendar list is checked every hour, or right away with *Refresh calendar list*.
@@ -118,7 +120,7 @@ Each user opens *Personal settings → GraphCal → Connect Microsoft 365*. A Mi
 Once a user connects, the events of their synced calendars are exchanged with Microsoft Graph: title, time, location, description and attendees.
 
 - OAuth tokens are stored encrypted in Nextcloud.
-- Disconnecting deletes the tokens, the synced Nextcloud calendars (the events stay in Outlook) and the change-notification subscription.
+- Disconnecting deletes the tokens from Nextcloud (Microsoft has no way for an app to revoke only its own; they are useless without the client secret and expire on their own), the synced Nextcloud calendars (the events stay in Outlook) and the change-notification subscription.
 - Deleting a user removes their sync state.
 
 ## Development

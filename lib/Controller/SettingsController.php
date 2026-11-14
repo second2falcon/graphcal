@@ -14,12 +14,14 @@ use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
+use OCP\AppFramework\Http\Attribute\PasswordConfirmationRequired;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\Config\IUserConfig;
 use OCP\IAppConfig;
 use OCP\IRequest;
 use OCP\IUserSession;
 use OCP\Security\ICrypto;
+use Psr\Log\LoggerInterface;
 use Throwable;
 
 class SettingsController extends Controller {
@@ -32,12 +34,14 @@ class SettingsController extends Controller {
 		private IUserConfig $userConfig,
 		private IUserSession $userSession,
 		private ICrypto $crypto,
+		private LoggerInterface $logger,
 	) {
 		parent::__construct(Microsoft::APP, $request);
 	}
 
 	/* ------------------------------------------------------------ admin (admin-only by default) */
 
+	#[PasswordConfirmationRequired]
 	#[FrontpageRoute(verb: 'POST', url: '/settings/admin')]
 	public function saveAdmin(string $tenant_id, string $client_id, string $client_secret = ''): JSONResponse {
 		$this->appConfig->setValueString(Microsoft::APP, 'tenant_id', trim($tenant_id));
@@ -49,6 +53,7 @@ class SettingsController extends Controller {
 	}
 
 	/** Copy the Microsoft app registration that Nextcloud Mail already uses (optional convenience). */
+	#[PasswordConfirmationRequired]
 	#[FrontpageRoute(verb: 'POST', url: '/settings/admin/from-mail')]
 	public function importFromMail(): JSONResponse {
 		$clientId = $this->appConfig->getValueString('mail', 'microsoft_oauth_client_id');
@@ -111,7 +116,8 @@ class SettingsController extends Controller {
 		try {
 			$action();
 		} catch (Throwable $e) {
-			return new JSONResponse(['error' => $e->getMessage()], Http::STATUS_BAD_REQUEST);
+			$this->logger->warning('GraphCal settings request failed', ['app' => Microsoft::APP, 'exception' => $e]);
+			return new JSONResponse(['error' => Microsoft::userMessage($e)], Http::STATUS_BAD_REQUEST);
 		}
 		return $this->state();
 	}

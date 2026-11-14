@@ -15,6 +15,7 @@ use OCP\IURLGenerator;
 use OCP\Security\ISecureRandom;
 use Psr\Log\LoggerInterface;
 use RuntimeException;
+use Throwable;
 
 /**
  * OAuth 2.0 (authorization code + PKCE) against Entra ID, and authenticated Microsoft Graph calls.
@@ -78,7 +79,7 @@ class Microsoft {
 	}
 
 	/** Redeem the authorization code, store the tokens and remember who signed in. */
-	public function finishAuthorization(string $userId, string $code, string $verifier): void {
+	public function finishAuthorization(string $userId, #[\SensitiveParameter] string $code, #[\SensitiveParameter] string $verifier): void {
 		$this->storeTokens($userId, $this->tokenRequest([
 			'grant_type' => 'authorization_code',
 			'code' => $code,
@@ -134,6 +135,7 @@ class Microsoft {
 		}
 		$options = [
 			'http_errors' => false,
+			'allow_redirects' => false, // Graph doesn't redirect these calls; the token goes to the checked URL only
 			'timeout' => 30,
 			'headers' => $headers + [
 				'Authorization' => 'Bearer ' . $this->accessToken($userId),
@@ -146,7 +148,12 @@ class Microsoft {
 			$options['headers']['Content-Type'] = 'application/json';
 		}
 		for ($attempt = 0; ; $attempt++) {
-			$response = $this->clientService->newClient()->request($method, $url, $options);
+			try {
+				$response = $this->clientService->newClient()->request($method, $url, $options);
+			} catch (Throwable $e) {
+				// Not chained as "previous": the HTTP client's stack frames hold the access token, and traces are logged.
+				throw new RuntimeException('Microsoft Graph request failed: ' . $e->getMessage());
+			}
 			$status = $response->getStatusCode();
 			if (in_array($status, [429, 503, 504], true) && $attempt < 3) {
 				// Known limit: blocking sleep inside the job; fine for per-user serial work, queue-based backoff if it hurts.
@@ -157,7 +164,7 @@ class Microsoft {
 		}
 		$raw = (string)$response->getBody();
 		$data = $raw === '' ? [] : (json_decode($raw, true) ?? []);
-		if ($status >= 400) {
+		if ($status >= 300) {
 			throw new GraphError($status, (string)($data['error']['code'] ?? ''), (string)($data['error']['message'] ?? $raw));
 		}
 		return $data;
@@ -194,11 +201,28 @@ class Microsoft {
 		return $link;
 	}
 
-	private function tokenRequest(array $params): array {
-		$response = $this->clientService->newClient()->post($this->authority() . '/oauth2/v2.0/token', [
-			'http_errors' => false,
-			'form_params' => $params + ['client_id' => $this->clientId(), 'client_secret' => $this->clientSecret()],
-		]);
+	/**
+	 * What a user may read of an error: Microsoft's answers and our own input checks, not internals
+	 * (database errors, paths), which only go to the log.
+	 */
+	public static function userMessage(Throwable $e): string {
+		return $e instanceof GraphError || $e instanceof TokenError || $e instanceof \InvalidArgumentException
+			? $e->getMessage()
+			: 'Something went wrong. Your administrator can find the details in the Nextcloud log.';
+	}
+
+	/** $params holds the authorization code or the refresh token: Nextcloud logs stack traces with arguments. */
+	private function tokenRequest(#[\SensitiveParameter] array $params): array {
+		try {
+			$response = $this->clientService->newClient()->post($this->authority() . '/oauth2/v2.0/token', [
+				'http_errors' => false,
+				'allow_redirects' => false,
+				'form_params' => $params + ['client_id' => $this->clientId(), 'client_secret' => $this->clientSecret()],
+			]);
+		} catch (Throwable $e) {
+			// Not chained as "previous": the HTTP client's stack frames hold the client secret and the tokens.
+			throw new TokenError('Microsoft token request failed: ' . $e->getMessage());
+		}
 		$data = json_decode((string)$response->getBody(), true);
 		$data = is_array($data) ? $data : [];
 		if ($response->getStatusCode() >= 400 || empty($data['access_token'])) {
@@ -206,12 +230,12 @@ class Microsoft {
 			if (in_array($data['error'] ?? '', ['invalid_grant', 'interaction_required', 'consent_required'], true)) {
 				throw new ReauthRequired((string)($data['error_description'] ?? $data['error']));
 			}
-			throw new RuntimeException('Microsoft token request failed: ' . ($data['error_description'] ?? $response->getStatusCode()));
+			throw new TokenError('Microsoft token request failed: ' . ($data['error_description'] ?? $response->getStatusCode()));
 		}
 		return $data;
 	}
 
-	private function storeTokens(string $userId, array $tokens): void {
+	private function storeTokens(string $userId, #[\SensitiveParameter] array $tokens): void {
 		$flags = IUserConfig::FLAG_SENSITIVE;
 		$this->userConfig->setValueString($userId, self::APP, 'access_token', (string)$tokens['access_token'], true, $flags);
 		$this->userConfig->setValueInt($userId, self::APP, 'token_expires', $this->time->getTime() + (int)($tokens['expires_in'] ?? 3600), true);

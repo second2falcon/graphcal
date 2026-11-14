@@ -122,7 +122,7 @@ jobs:
       - name: Browser tests and screenshots
         working-directory: server/apps/graphcal/tests/integration
         run: |
-          npm install --no-package-lock --no-audit --no-fund
+          npm install --no-package-lock --no-audit --no-fund --ignore-scripts
           node node_modules/playwright/cli.js install --with-deps chromium
           NC_DIR=$GITHUB_WORKSPACE/server SCREENSHOT_DIR=$RUNNER_TEMP/screenshots node browser.mjs
       - name: Upload screenshots
@@ -191,7 +191,7 @@ jobs:
       - name: Browser tests and screenshots
         working-directory: server/apps/graphcal/tests/integration
         run: |
-          npm install --no-package-lock --no-audit --no-fund
+          npm install --no-package-lock --no-audit --no-fund --ignore-scripts
           node node_modules/playwright/cli.js install --with-deps chromium
           NC_DIR=$GITHUB_WORKSPACE/server SCREENSHOT_DIR=$RUNNER_TEMP/screenshots node browser.mjs
       - name: Upload screenshots
@@ -253,7 +253,7 @@ jobs:
       - name: Browser tests and screenshots
         working-directory: graphcal/tests/integration
         run: |
-          npm install --no-package-lock --no-audit --no-fund
+          npm install --no-package-lock --no-audit --no-fund --ignore-scripts
           node node_modules/playwright/cli.js install --with-deps chromium
           SCREENSHOT_DIR=$RUNNER_TEMP/screenshots node browser.mjs
       - name: Upload screenshots

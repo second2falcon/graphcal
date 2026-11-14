@@ -8,6 +8,11 @@
 			"OCA\\GraphCal\\": "lib/"
 		}
 	},
+	"autoload-dev": {
+		"psr-4": {
+			"OCP\\": "vendor/nextcloud/ocp/OCP/"
+		}
+	},
 	"require": {
 		"php": "^8.2"
 	},
