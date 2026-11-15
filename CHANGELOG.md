@@ -2,7 +2,9 @@
 
 ## [Unreleased]
 
-Fixes for the security review of 2026-11-14.
+## 0.1.5
+
+Security release: fixes for the security review of 2026-11-14 (`docs/security-reviews/`).
 
 - Security: sign-in codes, tokens and the client secret can no longer end up in `nextcloud.log` when a request to Microsoft fails.
 - Security: only the owner can change a synced calendar. People it is shared with in Nextcloud can read it, but no longer create, change or delete events, which Exchange would have sent in the owner's name. Share or delegate the calendar in Outlook instead.
@@ -10,6 +12,7 @@ Fixes for the security review of 2026-11-14.
 - Security: disabled Nextcloud accounts stop syncing.
 - Saving the administrator settings asks for the password again, as other sensitive Nextcloud settings do.
 - Unexpected errors show a general message; the details are in the Nextcloud log.
+- The security reviews moved to `docs/security-reviews/`.
 
 ## 0.1.4
 

@@ -14,7 +14,7 @@ SPDX-License-Identifier: AGPL-3.0-or-later
 
 ## Summary
 
-No critical or high-severity issue was found. One medium issue should be fixed: OAuth credentials can end up in `nextcloud.log`. The rest are low-severity or hardening items. The fixes from the review of 2026-10-21 (`SECURITY_REVIEW.md`) are all still in place.
+No critical or high-severity issue was found. One medium issue should be fixed: OAuth credentials can end up in `nextcloud.log`. The rest are low-severity or hardening items. The fixes from the review of 2026-10-21 (`SecurityReview-261021.md`) are all still in place.
 
 | # | Severity | Finding |
 |---|---|---|
