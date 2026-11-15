@@ -103,7 +103,8 @@ if (process.env.OCC) {
 	// What Nextcloud's cron does (php -S has no PHP-FPM to pull right after the sign-in response).
 	execFileSync('php', [`${process.env.NC_DIR}/occ`, 'background-job:worker', '--once', 'OCA\\GraphCal\\BackgroundJob\\DeltaJob'])
 }
-const app = await bob.goto(`${nc}/index.php/apps/calendar/timeGridWeek/now`)
+// The week of the meeting (tomorrow): on a Sunday that is next week, not the one "now" shows.
+const app = await bob.goto(`${nc}/index.php/apps/calendar/timeGridWeek/${day(1, '09:00:00').slice(0, 10)}`)
 if (app?.ok()) {
 	const event = bob.locator('.fc-event', { hasText: 'Quarterly planning' }).first()
 	await event.waitFor({ timeout: 20000 }).catch(() => {})
