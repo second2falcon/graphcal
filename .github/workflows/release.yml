@@ -43,7 +43,8 @@ jobs:
     permissions:
       contents: write
     env:
-      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
+      # Only whether there is a key: the key itself goes to the one step that writes it to a file.
+      SIGN: ${{ secrets.APP_PRIVATE_KEY != '' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Check that the tag matches appinfo/info.xml
@@ -64,7 +65,7 @@ jobs:
             echo "::error::CHANGELOG.md has no (or an empty) section for $VERSION; add '## $VERSION' with the changes"; exit 1
           fi
       - name: Checkout Nextcloud server (its occ signs the app)
-        if: env.APP_PRIVATE_KEY != ''
+        if: env.SIGN == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: nextcloud/server
@@ -72,7 +73,9 @@ jobs:
           submodules: true
           path: build/nextcloud
       - name: Get the signing key and the app certificate
-        if: env.APP_PRIVATE_KEY != ''
+        if: env.SIGN == 'true'
+        env:
+          APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
         run: |
           key="$RUNNER_TEMP/graphcal.key" crt="$RUNNER_TEMP/graphcal.crt"
           printf '%s\n' "$APP_PRIVATE_KEY" > "$key"
@@ -99,7 +102,7 @@ jobs:
             gh release create "$GITHUB_REF_NAME" "$archive" "${args[@]}"
           fi
       - name: Publish to the Nextcloud App Store
-        if: env.APP_PRIVATE_KEY != ''
+        if: env.SIGN == 'true'
         env:
           APPSTORE_TOKEN: ${{ secrets.APPSTORE_TOKEN }}
         run: |

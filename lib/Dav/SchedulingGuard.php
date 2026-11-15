@@ -24,6 +24,8 @@ use Sabre\VObject\Reader;
  *  - Nextcloud must not schedule (no iMIP mails, no internal delivery): Exchange sends invitations.
  *  - Reject what Exchange can't store (unsupported repeat rules) instead of silently diverging.
  *  - Meetings can't move between calendars: Graph has no move, so it would cancel and re-invite.
+ *  - Only the owner writes: changes reach Exchange with the owner's token, so anyone else (people the
+ *    calendar is shared with in Nextcloud, delegates) would act, and send invitations, as the owner.
  * Runs at priority 50, before Nextcloud's schedule plugin (100).
  */
 class SchedulingGuard extends ServerPlugin {
@@ -66,6 +68,9 @@ class SchedulingGuard extends ServerPlugin {
 			return;
 		}
 		$this->suppress();
+		foreach (array_filter([$from, $to]) as $cal) {
+			$this->ownerOnly($cal);
+		}
 		$node = $this->server->tree->getNodeForPath($source);
 		if (method_exists($node, 'get') && ($from || $to)) {
 			$vcal = Reader::read($node->get());
@@ -77,10 +82,12 @@ class SchedulingGuard extends ServerPlugin {
 	}
 
 	private function suppressIfSynced(string $calendarPath): bool {
-		if (!$this->synced($calendarPath)) {
+		$cal = $this->synced($calendarPath);
+		if (!$cal) {
 			return false;
 		}
 		$this->suppress();
+		$this->ownerOnly($cal);
 		return true;
 	}
 
@@ -90,15 +97,24 @@ class SchedulingGuard extends ServerPlugin {
 		$this->server->httpRequest->setHeader('x-nc-scheduling', 'false');
 	}
 
-	private function synced(string $calendarPath): bool {
+	private function ownerOnly(array $cal): void {
+		$principal = $this->server->getPlugin('auth')?->getCurrentPrincipal();
+		if ($principal !== 'principals/users/' . $cal['user_id']) {
+			throw new Forbidden('Only its owner can change a calendar that is synced with Microsoft 365. '
+				. 'To edit it yourself, ask the owner to share it with you in Outlook, then add it in your GraphCal settings.');
+		}
+	}
+
+	/** The synced calendar behind a DAV calendar path, or null when it isn't one of ours. */
+	private function synced(string $calendarPath): ?array {
 		if (!str_starts_with($calendarPath, 'calendars/')) {
-			return false;
+			return null;
 		}
 		try {
 			$node = $this->server->tree->getNodeForPath($calendarPath);
 		} catch (NotFound) {
-			return false;
+			return null;
 		}
-		return $node instanceof Calendar && $this->store->calendarByNcId((int)$node->getResourceId()) !== null;
+		return $node instanceof Calendar ? $this->store->calendarByNcId((int)$node->getResourceId()) : null;
 	}
 }

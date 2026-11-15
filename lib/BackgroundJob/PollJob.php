@@ -34,7 +34,7 @@ class PollJob extends TimedJob {
 	#[\Override]
 	protected function run($argument): void {
 		foreach ($this->store->users() as $userId) {
-			if (!$this->ms->isConnected($userId)) {
+			if (!$this->ms->isConnected($userId) || !$this->sync->isActive($userId)) {
 				continue;
 			}
 			$this->sync->queuePull($userId);

@@ -10,6 +10,10 @@ Please **don't open a public issue**. Report it privately through GitHub instead
 
 Include what you found, how to reproduce it, and which GraphCal and Nextcloud versions are affected. You'll get an acknowledgement within a week, and we'll keep you posted until it's fixed. Once a fix is released, the advisory is published, crediting you unless you'd rather not be named.
 
+## Past reviews
+
+The security reviews of the code, with what was changed for each finding, are in [`docs/security-reviews/`](docs/security-reviews/).
+
 ## Scope
 
 In scope: this app's code, such as the OAuth sign-in flow, the token storage, the change-notification webhook and the sync between Nextcloud and Microsoft Graph.

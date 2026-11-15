@@ -165,6 +165,11 @@ class SyncService {
 		$this->ms->disconnect($userId);
 	}
 
+	/** Disabled Nextcloud accounts don't sync: no token refreshes, and none of their Microsoft data is copied. */
+	public function isActive(string $userId): bool {
+		return $this->userManager->get($userId)?->isEnabled() === true;
+	}
+
 	public function queuePull(string $userId): void {
 		if (!$this->jobList->has(DeltaJob::class, $userId)) {
 			$this->jobList->add(DeltaJob::class, $userId);
@@ -209,6 +214,9 @@ class SyncService {
 	/* ================================================================ Graph -> Nextcloud */
 
 	public function pull(string $userId): void {
+		if (!$this->isActive($userId)) {
+			return;
+		}
 		$lock = 'graphcal/pull/' . $userId;
 		try {
 			$this->locking->acquireLock($lock, ILockingProvider::LOCK_EXCLUSIVE);

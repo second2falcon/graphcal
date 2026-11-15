@@ -149,6 +149,12 @@ check(($q['code_challenge_method'] ?? '') === 'S256' && strlen($q['code_challeng
 check(str_contains($q['scope'] ?? '', 'Calendars.ReadWrite') && str_contains($q['scope'] ?? '', 'offline_access'), 'authorize request asks for calendar scopes');
 $bad = http('GET', "$nc/index.php/apps/graphcal/oauth/callback?code=x&state=wrong", null, [], 'alice:' . PASS, $jar);
 check(str_contains($bad['body'], 'did not match'), 'callback rejects a wrong state');
+$spoof = http('GET', "$nc/index.php/apps/graphcal/oauth/callback?error=x&error_description=Call+the+helpdesk", null, [], 'alice:' . PASS, $jar);
+check(!str_contains($spoof['body'], 'Call the helpdesk') && str_contains($spoof['body'], 'did not match'), 'callback shows no text from the URL without a sign-in of its own');
+// As when another site sends the browser here: the session cookie comes along, the strict same-site cookie doesn't.
+$lax = implode('; ', array_map(fn ($c) => "$c[5]=$c[6]", array_filter(array_map(fn ($l) => explode("\t", trim($l)), file($jar)), fn ($c) => count($c) === 7 && !str_contains($c[5], 'sameSiteCookiestrict'))));
+$cross = http('GET', "$nc/index.php/apps/graphcal/oauth/start", null, ["Cookie: $lax"], 'alice:' . PASS);
+check($lax !== '' && $cross['status'] === 303 && !str_contains($cross['headers'], 'oauth2/v2.0/authorize'), 'another site cannot start the sign-in', $cross['status'] . ' ' . $cross['headers']);
 $start = http('GET', "$nc/index.php/apps/graphcal/oauth/start", null, [], 'alice:' . PASS, $jar);
 preg_match('/^Location:\s*(\S+)/mi', $start['headers'], $loc);
 parse_str((string)parse_url($loc[1], PHP_URL_QUERY), $q);
@@ -204,6 +210,20 @@ $accepted = str_replace('PARTSTAT=NEEDS-ACTION', 'PARTSTAT=ACCEPTED', $inviteObj
 $put = dav('PUT', 'alice', "$calendar/ical-invite1.ics", $accepted, ['Content-Type: text/calendar']);
 pushed();
 check(count(mockRequests('POST', '#^/v1\.0/me/events/invite1/accept$#')) === 1, 'accepting an invitation sends the reply through Exchange', (string)$put['status']);
+
+echo "Only the owner can change a synced calendar (changes reach Exchange in the owner's name)\n";
+$share = dav('POST', 'alice', "$calendar/", '<x:share xmlns:x="http://owncloud.org/ns" xmlns:d="DAV:"><x:set><d:href>principal:principals/users/bob</d:href><x:read-write/></x:set></x:share>', ['Content-Type: application/xml']);
+$shared = "{$calendar}_shared_by_alice";
+check(str_contains(implode('', objects('bob', $shared)), 'Project kickoff'), 'someone the calendar is shared with can read it', (string)$share['status']);
+$requests = count(mockState()['requests']);
+$r = dav('PUT', 'bob', "$shared/intruder.ics", ics('intruder', "DTSTART:{$soon}T090000Z\nDTEND:{$soon}T100000Z\nSUMMARY:Sent as Alice\nORGANIZER:mailto:alice@contoso.test\nATTENDEE:mailto:victim@external.test"), ['Content-Type: text/calendar']);
+check($r['status'] === 403 && str_contains($r['body'], 'Only its owner can change a calendar that is synced with Microsoft 365'), 'but cannot create events in it', $r['status'] . ' ' . strip_tags($r['body']));
+$r = dav('PUT', 'bob', "$shared/meeting-1.ics", str_replace('Project kickoff', 'Hijacked', $meeting), ['Content-Type: text/calendar']);
+check($r['status'] === 403, 'nor change them', (string)$r['status']);
+$r = dav('DELETE', 'bob', "$shared/meeting-1.ics");
+check($r['status'] === 403, 'nor delete them', (string)$r['status']);
+pushed();
+check(count(mockState()['requests']) === $requests && str_contains(implode('', objects('alice', $calendar)), 'Project kickoff (moved)'), 'nothing of that reached Exchange or the calendar');
 
 echo "Repeat patterns Microsoft 365 can't store are refused\n";
 $createdBefore = count(mockRequests('POST', '#^/v1\.0/me/calendars/cal1/events$#'));
@@ -287,6 +307,18 @@ check($exists($projects), 'a calendar added in Outlook shows up after a refresh'
 mockSet(['calendars' => array_values(array_filter(mockState()['calendars'], fn ($c) => $c['id'] !== 'cal3'))]);
 $api('POST', '/refresh');
 check(!$exists($projects) && !isset($listed()['Projects']), 'a calendar deleted in Outlook is removed after a refresh');
+
+echo "A disabled Nextcloud account stops syncing\n";
+$pulls = fn () => count(mockRequests('GET', '#^/v1\.0/me/calendars/cal1/calendarView/delta$#'));
+occ('user:disable alice');
+$before = $pulls();
+$notify();
+$fpm ? usleep(1500000) : cron();
+check($pulls() === $before, 'no pull for a disabled account', ($pulls() - $before) . ' pulls');
+occ('user:enable alice');
+$notify();
+settle(fn () => $pulls() > $before);
+check($pulls() > $before, 'and syncing resumes when the account is enabled again');
 
 echo "Disconnect\n";
 $off = http('POST', "$nc/index.php/apps/graphcal/settings/personal/disconnect", '{}', ['Content-Type: application/json', "requesttoken: $csrf"], 'alice:' . PASS, $jar);
